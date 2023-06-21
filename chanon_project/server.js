@@ -13,7 +13,7 @@ const app = express();
 const PORT = 5000
 
 // mongoDB
-mongoose.connect("mongodb://127.0.0.1/chanonpro");
+mongoose.connect("mongodb://localhost/chanonpro");
 const db = mongoose.connection;
 db.on('error', (error) => console.log(error));
 db.once('open', () => console.log('connected'));
@@ -50,9 +50,10 @@ app.use((req, res, next) => {
     next();
 });
 
+// Methods in JavaScript, such as get, post, and use, are functions that define different routes and behaviors for handling HTTP requests in the Express.js framework.
 
-//  get all label prolexem
-
+// get all label prolexem
+// app.get('/fetch-all-data', ...) defines a route that handles a GET request to fetch all data from the MongoDB collection using the histo model.
 app.get('/fetch-all-data', async (req, res) => {
 
     try {
@@ -68,6 +69,8 @@ app.get('/fetch-all-data', async (req, res) => {
     }
 });
 
+
+// app.get('/filter', ...) defines a route that handles a GET request to filter data based on the provided query parameters (labelprolexme and lng).
 app.get('/filter', async (req, res) => {
 
     const { labelprolexme, lng } = req.query;
@@ -96,7 +99,7 @@ app.get('/filter', async (req, res) => {
                 }
                 console.log('data sql : ', results.length);
                 if (results.length === 0) {
-                    const response_nbrContri = await axios.get(`http://127.0.0.1:5000/api/nbr-contributors?name=${labelprolexme}&lng=${lnge}`);
+                    const response_nbrContri = await axios.get(`http://localhost:5000/api/nbr-contributors?name=${labelprolexme}&lng=${lnge}`);
                     console.log('======================================== Result ==============================================');
                     console.log('result  : ', response_nbrContri.data);
                     console.log('result splt  : ', response_nbrContri.data.splt);
@@ -107,7 +110,7 @@ app.get('/filter', async (req, res) => {
 
                     var splt = response_nbrContri.data.splt;
                     if (response_nbrContri.status === 200) {
-                        const response_sizeItm = await axios.get(`http://127.0.0.1:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lnge}`);
+                        const response_sizeItm = await axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lnge}`);
                         console.log('b');
                         console.log('======================================== Result ==============================================');
 
@@ -116,7 +119,7 @@ app.get('/filter', async (req, res) => {
                         console.log('result page id : ', response_sizeItm.data.data.query.pages[splt]);
                         console.log('result page id  : ', response_sizeItm.data.data.query.pages[splt].pageid);
                         console.log('result size : ', response_sizeItm.data.data.query.pages[splt].revisions[0].size);
-                        const response_nbrInterLink = await axios.get(`http://127.0.0.1:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lnge}`);
+                        const response_nbrInterLink = await axios.get(`http://localhost:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lnge}`);
                         console.log('c');
                         console.log('======================================== Result ==============================================');
 
@@ -127,7 +130,7 @@ app.get('/filter', async (req, res) => {
                         console.table(response_nbrInterLink.data.data.query.backlinks);
                         console.log(response_nbrInterLink.status);
                         if (response_nbrInterLink.status == '200') {
-                            const response_nbrExtrLink = await axios.get(`http://127.0.0.1:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lnge}`);
+                            const response_nbrExtrLink = await axios.get(`http://localhost:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lnge}`);
                             console.log('d');
                             console.log('======================================== Result ==============================================');
 
@@ -140,7 +143,7 @@ app.get('/filter', async (req, res) => {
 
                             if (response_nbrExtrLink.status === 200) {
                                 // console.log('qrt five');
-                                const response_crtFive = await axios.get(`http://127.0.0.1:5000/api/crt-five?name=${labelprolexme}&lng=${lnge}`);
+                                const response_crtFive = await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lnge}`);
 
                                 console.log('======================================== Result ==============================================');
                                 console.log(' crt five : ', response_crtFive);
@@ -153,12 +156,12 @@ app.get('/filter', async (req, res) => {
                                 console.log(' crt five : histVal', response_crtFive.data.hitsValue);
                                 console.log(' crt five status', response_crtFive.status);
                                 if (response_crtFive.status === 200) {
-                                    const casl = await axios.post(`http://127.0.0.1:5000/api/additive_wighting`, {
+                                    const casl = await axios.post(`http://localhost:5000/api/additive_wighting`, {
                                         normTable: response_crtFive.data.rowofhits,
                                         wight: response_crtFive.data.sumTotale
                                     });
                                     // console.log('cal : ', cal);
-                                    const cal = await axios.get(`http://127.0.0.1:5000/api/cls`);
+                                    const cal = await axios.get(`http://localhost:5000/api/cls`);
 
                                     console.log('notoritie : ', cal.data.data);
                                     if (cal.data.data === 1 || cal.data.data === 2) {
@@ -176,7 +179,8 @@ app.get('/filter', async (req, res) => {
                                             lng: 'Fr',
                                             type: 'person'
                                         });
-                                        // const newProducts = await addProduct.save();
+                                        const newProducts = await addProduct.save();
+                                        console.log('### newProducts', newProducts);
 
                                     }
                                 }
@@ -208,7 +212,9 @@ app.get('/filter', async (req, res) => {
     }
 });
 
+
 // add new labelprolexem
+// app.post('/addhisto', ...) defines a route that handles a POST request to add a new entry to the histo collection in MongoDB.
 app.post('/addhisto', async (req, res) => {
     const currentDate = new Date();
     const currentTime = currentDate.toLocaleString();
@@ -228,6 +234,7 @@ app.post('/addhisto', async (req, res) => {
 
     try {
         const newProducts = await addProduct.save();
+        console.log('### app.post(/addhisto', newProducts);
         return res.status(201).json({
             data: newProducts
         })
@@ -239,6 +246,8 @@ app.post('/addhisto', async (req, res) => {
 
 });
 
+
+// app.get("/api/scrap", ...) defines a route that handles a GET request to scrape data from a Wikipedia page using the request and cheerio libraries.
 app.get("/api/scrap", async (req, res) => {
     const { name, lng } = req.query;
 
@@ -264,6 +273,7 @@ app.get("/api/scrap", async (req, res) => {
 
 
 // this function for calculate nbr of contributors
+// app.get('/api/nbr-contributors', ...) defines a route that handles a GET request to calculate the number of contributors for a Wikipedia page using the Wikimedia API.
 app.get('/api/nbr-contributors', async (req, res) => {
     const { name, lng } = req.query;
 
@@ -294,6 +304,7 @@ app.get('/api/nbr-contributors', async (req, res) => {
 
 
 // this function for extract item size
+// app.get('/api/size-item', ...) defines a route that handles a GET request to extract the size of the query result from the histo collection in MongoDB.
 app.get('/api/size-item', async (req, res) => {
     const { name, splt, lng } = req.query;
     try {
@@ -333,6 +344,7 @@ app.get('/api/nbr-internal-links', async (req, res) => {
     }
 });
 
+
 // this function extract the number the external links
 app.get('/api/nbr-external-links', async (req, res) => {
     const { name, lng } = req.query;
@@ -348,7 +360,9 @@ app.get('/api/nbr-external-links', async (req, res) => {
     }
 });
 
+
 // this function critare 5
+// app.get('/api/crt-five', ...) defines a route that handles a GET request to retrieve data from the Wikimedia API and perform calculations on the data.
 app.get('/api/crt-five', async (req, res) => {
     const { name, lng } = req.query;
 
@@ -400,15 +414,15 @@ app.get('/api/wightofcriteria', async (req, res) => {
 });
 
 
-
 // simple_additive_wighting
+// app.post('/api/additive_wighting', ...) defines a route that handles a POST request to perform additive weighting calculations based on the provided request body parameters.
 app.post('/api/additive_wighting', async (req, res) => {
     const { normTable, wight } = req.body
 
     console.log('norm Table : ', normTable);
 
     try {
-        const cls = await axios.get(`http://127.0.0.1:5000/api/cls`);
+        const cls = await axios.get(`http://localhost:5000/api/cls`);
 
         console.log('saw : ', cls);
         console.log('saw : ', cls.data.data);
