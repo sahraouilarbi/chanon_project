@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 
-
 const chanonproSchema = new mongoose.Schema({
     labelprolexme: {
         type: String,
@@ -12,7 +11,7 @@ const chanonproSchema = new mongoose.Schema({
     },
     nbrauthores: {
         type: String,
-        required: true
+        //required: true
     },
     extlink: {
         type: String,
@@ -24,11 +23,11 @@ const chanonproSchema = new mongoose.Schema({
     },
     sizedata: {
         type: String,
-        required: true
+        //required: true
     },
     pagerankwiki: {
         type: String,
-        required: true
+        //required: true
     },
     frenq: {
         type: String,
@@ -48,7 +47,7 @@ const chanonproSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        required: true
+        //required: true
     },
 })
 
