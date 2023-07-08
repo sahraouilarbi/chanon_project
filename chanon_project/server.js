@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const histo = require('./models/products');
 const cls = require('./routes/cls');
 const cors = require('cors');
+const { setDefaultHighWaterMark } = require('stream');
 const app = express();
 const PORT = 5000
 
@@ -22,23 +23,68 @@ app.use(express.json());
 app.use(cors());
 
 const logStream = fs.createWriteStream('logs.txt', { flags: 'a' });
-var connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'root',
-    //database: '2_prolexbase_3_1_fra_data'
-    database: '2_prolexbase_3_1_eng_data'
-});
+// var connection = mysql.createConnection({
+//     host: 'localhost',
+//     user: 'root',
+//     password: 'root',
+//     database: '2_prolexbase_3_1_eng_data'
+// });
 
 
 // Create a MySQL connection pool
-const pool = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'root',
-    database: '2_prolexbase_3_1_other_data',
-    connectionLimit: 10, // Adjust the connection limit as per your requirements
-});
+// const pool = mysql.createPool({
+//     host: 'localhost',
+//     user: 'root',
+//     password: 'root',
+//     database: '2_prolexbase_3_1_other_data',
+//     connectionLimit: 10, // Adjust the connection limit as per your requirements
+// });
+
+// Create a function to get the database name based on the selected language
+function getDatabaseName(language) {
+    switch (language) {
+        case 'ar':
+            return '2_prolexbase_3_1_other_data';
+        case 'en':
+            return '2_prolexbase_3_1_eng_data'
+        case 'fr':
+            return '2_prolexbase_3_1_fra_data';
+        default:
+            return '';
+    }
+}
+
+// Create a function to get the database table name based on the selected language
+function getDatabaseTableName(language) {
+    switch (language) {
+        case 'ar':
+            return 'prolexeme_arb';
+        case 'en':
+            return 'prolexeme_eng'
+        case 'fr':
+            return 'alias_fra';
+        default:
+            return '';
+    }
+}
+
+// Create a function to get the database table name based on the selected language
+function getDatabaseTableNameColumnName(databaseTableName) {
+    switch (databaseTableName) {
+        case 'prolexeme_arb':
+            return 'LABEL_PROLEXEME';
+        case 'prolexeme_eng':
+            return 'LABEL_PROLEXEME'
+        case 'alias_fra':
+            return 'LABEL_ALIAS';
+        default:
+            return '';
+    }
+}
+
+
+
+
 
 // middleware to log each request to the file
 /**
@@ -48,7 +94,20 @@ const pool = mysql.createPool({
 app.use((req, res, next) => {
     const now = new Date();
     const log = `${now}: ${req.method} ${req.path}\n`;
+    const language = req.query['lng'];
+    const databaseName = getDatabaseName(language);
+
+    // Create a MySQL connection pool
+    const pool = mysql.createPool({
+        host: 'localhost',
+        user: 'root',
+        password: 'root',
+        database: databaseName,
+        connectionLimit: 10, // Adjust the connection limit as per your requirements
+    });
+
     req.db = pool;
+    
     // logStream.write(log);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
@@ -88,9 +147,7 @@ app.get('/fetch-all-data', async (req, res) => {
  */
 app.get('/filter', async (req, res) => {
 
-    const { labelprolexme, lng } = req.query;
-    console.log('### app.get(filter) - label name : ', labelprolexme);
-    console.log('### app.get(filter) - lng : ', lng);
+    const { labelprolexme, lng, year } = req.query;
     const currentDate = new Date();
     const currentTime = currentDate.toLocaleString();
     try {
@@ -98,23 +155,30 @@ app.get('/filter', async (req, res) => {
         const query_size = await histo.find();
 
         // const result_size = await db.query('SELECT count(*) FROM prolexeme_arb');
-        // console.log('### 04 app.get(filter)  - result_size : ',result_size);
         
         const query = await histo.find({
             "labelprolexme": labelprolexme
         });
-        console.log('### app.get(filter) - query :',query);
-        console.log('### app.get(filter) - query.length : ', query.length);
 
+        console.log('### app.get(filter) - query.length : ', query.length);
+        
+        
         let msg;
         if (query.length === 0) {
             const db = req.db;
-            db.query(`SELECT * FROM prolexeme_arb where LABEL_PROLEXEME = '${labelprolexme}'`, async (err, results) => {
+
+            
+            const dbTableName = getDatabaseTableName(lng);
+
+            const dbTableNameColumnName = getDatabaseTableNameColumnName(dbTableName);
+            
+            db.query(`SELECT * FROM ${dbTableName} where ${dbTableNameColumnName} = '${labelprolexme}'`, async (err, results) => {
+
                 if (err) {
                     console.error('### app.get(filter) - Error executing query:', err);
-                    return res.status(500).send('Server Error 01');
+                    return res.status(500).send('Server Error #01');
                 }
-                console.log('### app.get(filter) - data sql : ', results.length);
+
                 if (results.length === 0) {
 
                     console.log('### app.get(filter) - a');                    
@@ -128,22 +192,26 @@ app.get('/filter', async (req, res) => {
                     console.log('### app.get(filter) - result data : ', response_nbrContri.data.data);
                     console.table(response_nbrContri.data.data);
 
-                    var splt = response_nbrContri.data.splt;
+                    //var splt = response_nbrContri.data.splt;
+                    const splt = Object.keys(response_nbrContri.data.data.query.pages)[0];
+                    
                     if (response_nbrContri.status === 200) {
-                        const response_sizeItm = await axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lng}`);
-                        console.log('### app.get(filter) - b');
+                        const response_sizeItm = await axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lng}`);                        console.log('### app.get(filter) - b');
                         console.log('======================================== Result ==============================================');
-
+                        
                         console.log('### app.get(filter) - response : ', response_sizeItm.data);
                         console.log('### app.get(filter) - result data : ', response_sizeItm.data.data);
-                        console.log('### app.get(filter) - result page id : ', response_sizeItm.data.data.query.pages[splt]);
-                        console.log('### app.get(filter) - result page id  : ', response_sizeItm.data.data.query.pages[splt].pageid);
-                        console.log('### app.get(filter) - result size : ', response_sizeItm.data.data.query.pages[splt].revisions[0].size);
+                        //console.log('### app.get(filter) - result page id : ', response_sizeItm.data.data.query.pages[splt]);
+                        
+                        const splt_ = Object.keys(response_sizeItm.data.data.query.pages)[0];
+                        
+                        console.log('### app.get(filter) - result page id  : ', response_sizeItm.data.data.query.pages[splt_].pageid);
+                        console.log('### app.get(filter) - result size : ', splt != -1 ? response_sizeItm.data.data.query.pages[splt_].revisions[0].size : 0);
                         
                         const response_nbrInterLink = await axios.get(`http://localhost:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lng}`);
                         console.log('### app.get(filter) - c');
                         console.log('======================================== Result ==============================================');
-
+                        
                         console.log('### app.get(filter) - response : ', response_nbrInterLink);
                         console.log('### app.get(filter) - response data  : ', response_nbrInterLink.data);
                         console.log('### app.get(filter) - response data sum: ', response_nbrInterLink.data.sum);
@@ -155,18 +223,18 @@ app.get('/filter', async (req, res) => {
                             const response_nbrExtrLink = await axios.get(`http://localhost:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lng}`);
                             console.log('### app.get(filter) - d');
                             console.log('======================================== Result ==============================================');
-
+                            
                             console.log('### app.get(filter) - response : ', response_nbrExtrLink);
                             console.log('### app.get(filter) - response data : ', response_nbrExtrLink.data);
                             console.table(response_nbrExtrLink.data);
                             console.log('### app.get(filter) - response data size : ', response_nbrExtrLink.data.size);
                             console.log('### app.get(filter) - response status : ', response_nbrExtrLink.status);
-
-
+                            
+                            
                             if (response_nbrExtrLink.status === 200) {
                                 // console.log('qrt five');
                                 const response_crtFive = await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}`);
-
+                                
                                 console.log('======================================== Result ==============================================');
                                 console.log('### app.get(filter) -  crt five : ', response_crtFive);
                                 console.log('### app.get(filter) -  crt five data : ', response_crtFive.data.datasiz);
@@ -183,19 +251,23 @@ app.get('/filter', async (req, res) => {
                                         wight: response_crtFive.data.sumTotale
                                     });
                                     // console.log('cal : ', cal);
-                                    const cal = await axios.get(`http://localhost:5000/api/cls`);
-
+                                    const cal = await axios.get(`http://localhost:5000/api/cls`);                                    
                                     console.log('### app.get(filter) - notoritie : ', cal.data.data);
-                                    
                                     if (cal.data.data === 1 || cal.data.data === 2) {
                                         console.log('### newProduct : start insert');
+                                
+                                        const revisionPageId = Object.keys(response_sizeItm.data.data.query.pages)[0];
+                                
+                                        revisionSizeData = response_sizeItm.data.data.query.pages[revisionPageId].revisions
+                                
+                                        
                                         const addProduct = new histo({
                                             labelprolexme: labelprolexme,
                                             numpivot: `1552`,
                                             nbrauthores: `${response_nbrContri.data.sumD}`,
                                             extlink: `${response_nbrExtrLink.data.size}`,
                                             hists: `${response_crtFive.data.hitsValue}`,
-                                            sizedata: `${response_sizeItm.data.data.query.pages[splt].revisions[0].size}`,
+                                            sizedata: `${revisionSizeData}`,
                                             pagerankwiki: `${response_crtFive.data.sumTotale}`,
                                             frenq: `2`,
                                             wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
@@ -331,28 +403,38 @@ app.get("/api/scrap", async (req, res) => {
 app.get('/api/nbr-contributors', async (req, res) => {
     const { name, lng } = req.query;
 
-    console.log('### app.get(/api/nbr-contributors) - req.query : ', req.query);
-
     try {
-        //const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&titles=${name}&prop=contributors&pclimit=max&format=json&nonredirects&rawcontinue`);
+      //const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&titles=${name}&prop=contributors&pclimit=max&format=json&nonredirects&rawcontinue`);
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&titles=${name}&prop=contributors&pclimit=max&format=json&rawcontinue`);
         let sumD = 0;
-        console.log('### app.get(/api/nbr-contributors) - page id : ', response.data['query-continue'].contributors.pccontinue);
-        var splt = response.data['query-continue'].contributors.pccontinue.split('|')[0];
-        console.log('### app.get(/api/nbr-contributors) - after split : ', splt);
-        for (let dt of response.data.query.pages[splt].contributors) {
-            sumD += dt['userid']
-        }
 
+        const data = response.data;
+
+        const pageId = Object.keys(data.query.pages)[0];
+
+        const contributorsCount = pageId != -1 ? data.query.pages[pageId].contributors.length : 0;
+
+        // console.log('### app.get(/api/nbr-contributors) - page id : ', response.data['query-continue'].contributors.pccontinue);
+        // var splt = response.data['query-continue'].contributors.pccontinue.split('|')[0];
+        // console.log('### app.get(/api/nbr-contributors) - after split : ', splt);
+        // for (let dt of response.data.query.pages[splt].contributors) {
+        //     sumD += dt['userid']
+        // }
+        
         console.log('### app.get(/api/nbr-contributors) - sum data : ', sumD);
+        
         res.send({
-            "splt": splt,
-            "sumD": sumD,
-            "size": response.data.query.pages[splt].contributors.length,
-            "data": response.data,
+        //  "splt": splt,
+            "splt": pageId,
+        //  "sumD": sumD,
+        //  "size": response.data.query.pages[splt].contributors.length,
+            "size": contributorsCount,
+        //  "data": response.data,
+            "data": data,
         });
     } catch (error) {
-        res.status(500).send('### 02 Server Error');
+        console.log(error);
+        res.status(500).send('Server Error #02');
     }
 });
 
@@ -365,16 +447,24 @@ app.get('/api/nbr-contributors', async (req, res) => {
  */
 app.get('/api/size-item', async (req, res) => {
     const { name, splt, lng } = req.query;
+    console.log('###-### ###-###',req.query);
     try {
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=size&format=json&titles=${name}&redirects`);
+
+        const data = response.data;
+        const pageId = Object.keys(data.query.pages)[0];
+        const size = pageId != -1 ? data.query.pages[pageId].revisions[0].size : 0;
+
         // console.log("size item : ", name);
         res.send({
-            "size": response.data.query.pages[splt].revisions[0]['size'],
-            "data": response.data,
+            // "size": response.data.query.pages[splt].revisions[0]['size'],
+            "size": size,
+            // "data": response.data,
+            "data": data,
         });
     } catch (error) {
         console.error('### app.get(/api/size-item) - Error : ', error);
-        res.status(500).send('Server Error 03');
+        res.status(500).send('Server Error #03');
     }
 });
 
@@ -388,7 +478,8 @@ app.get('/api/nbr-internal-links', async (req, res) => {
     const { name, lng } = req.query;
 
     try {
-        const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&list=backlinks&bllimit=max&bltitle=${name}&blfilterredir=nonredirects&format=json&raccontinue`);
+        // const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&list=backlinks&bllimit=max&bltitle=${name}&blfilterredir=nonredirects&format=json&raccontinue`);
+        const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&list=backlinks&bllimit=max&bltitle=${name}&blfilterredir=nonredirects&format=json&rawcontinue`);
         let sum = 0;
         for (let dt of response.data.query.backlinks) {
             sum += dt['pageid']
@@ -415,10 +506,17 @@ app.get('/api/nbr-internal-links', async (req, res) => {
 app.get('/api/nbr-external-links', async (req, res) => {
     const { name, lng } = req.query;
     try {
-        const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&bltitle=${name}&format=json&rawcontinue`);
+        // const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&bltitle=${name}&format=json&rawcontinue`);
+        const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&titles=${name}&format=json&rawcontinue`);
+        const data = response.data;
+        const pageId = Object.keys(data.query.pages)[0];
+        const extlinks = data.query.pages[pageId].extlinks || [];
+        const extlinksCount = extlinks.length;
         res.send({
-            "data": response.data,
-            "size": response.data.limits.extlinks
+            //"data": response.data,
+            "data": data,
+            //"size": response.data.limits.extlinks
+            "size": extlinksCount
         });
     } catch (error) {
         console.error('### app.get(/api/nbr-external-links) - Error : ',error);
@@ -438,34 +536,41 @@ app.get('/api/crt-five', async (req, res) => {
     console.log('### app.get(/api/crt-five) - req.query', req.query);
     const { name, lng } = req.query;
 
+    console.log(req.query);
+
     try {
 
         const response = await axios.get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${lng}.wikipedia/all-access/all-agents/${name}/monthly/2016010100/2022013100`);
 
-        let size = response.data.items.length;
-        var data = response.data.items;
-        let rowofhits = [];
-        let hitsValue = [];
-        let sumHitV = 0;
-        let sumHistV = 0;
+       // console.log('### app.get(/api/crt-five) - response.data : ', response.data);
+        
+        if ( response.status === 200 ){
+            let size = response.data.items.length;
+            var data = response.data.items;
+            let rowofhits = [];
+            let hitsValue = [];
+            let sumHitV = 0;
+            let sumHistV = 0;
 
-        for (let i = 0; i < size; i++) {
-            let histV = data[i]['views'] * ((i + 1) / size);
-            rowofhits.push(Math.round(histV));
-            sumHitV += Math.round(histV);
-            console.log('histV : ', histV);
-            hitsValue.push(sumHitV);
+            for (let i = 0; i < size; i++) {
+                let histV = data[i]['views'] * ((i + 1) / size);
+                rowofhits.push(Math.round(histV));
+                sumHitV += Math.round(histV);
+                console.log('histV : ', histV);
+                hitsValue.push(sumHitV);
+            }
+            res.send({
+                "datasiz": response.data.items,
+                "sumTotale": sumHitV,
+                "size": response.data.items.length,
+                "rowofhits": rowofhits,
+                "hitsValue": hitsValue,
+            });
         }
-        res.send({
-            "datasiz": response.data.items,
-            "sumTotale": sumHitV,
-            "size": response.data.items.length,
-            "rowofhits": rowofhits,
-            "hitsValue": hitsValue,
-        }
-        );
+        
     } catch (error) {
-        res.status(500).send('Server Error #06', error);
+        // console.log('### app.get(/api/crt-five) - Error', error);
+        res.status(500).send('Server Error #06');
     }
 });
 
@@ -498,12 +603,9 @@ app.get('/api/wightofcriteria', async (req, res) => {
  */
 app.post('/api/additive_wighting', async (req, res) => {
     const { normTable, wight } = req.body
-
     console.log('norm Table : ', normTable);
-
     try {
         const cls = await axios.get(`http://localhost:5000/api/cls`);
-
         console.log('saw : ', cls);
         console.log('saw : ', cls.data.data);
         // const ntr = cls
@@ -521,7 +623,8 @@ app.post('/api/additive_wighting', async (req, res) => {
         }
 
     } catch (error) {
-        res.status(500).send('### app.post(/api/additive_wighting) - Server Error #07 : ', error);
+        console.log(error);
+        res.status(500).send('Server Error #07');
     }
 });
 
