@@ -49,6 +49,11 @@ const chanonproSchema = new mongoose.Schema({
         type: String,
         //required: true
     },
+    year_views:[
+        {
+            year:{type:String, unique: true},
+            views_average:{type:String}
+        }],
 })
 
 

@@ -233,7 +233,7 @@ app.get('/filter', async (req, res) => {
                             
                             if (response_nbrExtrLink.status === 200) {
                                 // console.log('qrt five');
-                                const response_crtFive = await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}`);
+                                const response_crtFive = await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`);
                                 
                                 console.log('======================================== Result ==============================================');
                                 console.log('### app.get(filter) -  crt five : ', response_crtFive);
@@ -244,7 +244,9 @@ app.get('/filter', async (req, res) => {
                                 console.log('### app.get(filter) -  crt five size: ', response_crtFive.data.size);
                                 console.log('### app.get(filter) -  crt five rowHist: ', response_crtFive.data.rowofhits);
                                 console.log('### app.get(filter) -  crt five : histVal', response_crtFive.data.hitsValue);
+                                console.log('### app.get(filter) - crt five moyenneViews', response_crtFive.data.moyenneViews);
                                 console.log('### app.get(filter) -  crt five status', response_crtFive.status);
+                                
                                 if (response_crtFive.status === 200) {
                                     const casl = await axios.post(`http://localhost:5000/api/additive_wighting`, {
                                         normTable: response_crtFive.data.rowofhits,
@@ -273,7 +275,13 @@ app.get('/filter', async (req, res) => {
                                             wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
                                             date: currentTime,
                                             lng: lng,
-                                            type: 'person'
+                                            type: 'person',
+                                            year_views:[
+                                                {
+                                                    year: `${year}`,
+                                                    views_average: `${response_crtFive.data.moyenneViews}`,
+                                                }
+                                            ],
                                         });
                                         const newProducts = await addProduct.save();
                                         console.log('### newProducts : end insert');
@@ -534,13 +542,14 @@ app.get('/api/nbr-external-links', async (req, res) => {
 app.get('/api/crt-five', async (req, res) => {
     
     console.log('### app.get(/api/crt-five) - req.query', req.query);
-    const { name, lng } = req.query;
+    const { name, lng, year } = req.query;
 
     console.log(req.query);
 
     try {
 
-        const response = await axios.get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${lng}.wikipedia/all-access/all-agents/${name}/monthly/2016010100/2022013100`);
+        // const response = await axios.get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${lng}.wikipedia/all-access/all-agents/${name}/monthly/2016010100/2022013100`);
+        const response = await axios.get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/${lng}.wikipedia/all-access/all-agents/${name}/monthly/${year}010100/${year}123100`);
 
        // console.log('### app.get(/api/crt-five) - response.data : ', response.data);
         
@@ -552,19 +561,28 @@ app.get('/api/crt-five', async (req, res) => {
             let sumHitV = 0;
             let sumHistV = 0;
 
+            // calcul de la moyenne de views sur une année
+            let sommeViews = 0;
+            let moyenneViews = 0;
+
             for (let i = 0; i < size; i++) {
                 let histV = data[i]['views'] * ((i + 1) / size);
                 rowofhits.push(Math.round(histV));
                 sumHitV += Math.round(histV);
                 console.log('histV : ', histV);
                 hitsValue.push(sumHitV);
+                // Somme des views sur une année
+                sommeViews += data[i]['views'];
             }
+            moyenneViews = sommeViews / size
             res.send({
                 "datasiz": response.data.items,
                 "sumTotale": sumHitV,
                 "size": response.data.items.length,
                 "rowofhits": rowofhits,
                 "hitsValue": hitsValue,
+                // moyenne des views sur une année
+                "moyenneViews":moyenneViews,
             });
         }
         
