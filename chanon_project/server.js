@@ -161,6 +161,7 @@ app.get('/filter', async (req, res) => {
         });
 
         console.log('### app.get(filter) - query.length : ', query.length);
+        console.log('### app.get(filter) - query : ', query);
         
         
         let msg;
@@ -325,6 +326,57 @@ app.get('/filter', async (req, res) => {
                     messB: 'test',
                 })
             });
+        } else {
+            // update product
+            console.log('update product');
+            const response_crtFive = await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`);
+            
+            try{
+                    const reQuery = await histo.find({"labelprolexme": labelprolexme});
+                    console.log('@@ reQuery', reQuery);
+                    const productId = reQuery[0]._id;
+                    console.log('@@ productId to update',productId);
+
+                    const filter = {
+                        _id: productId,
+                        'year_views.year': year,
+                    };
+
+                    const update = {
+                        $set: {
+                            'year_views.$.views_average': `${response_crtFive.data.moyenneViews}`,
+                        }
+                    }
+                    if(reQuery[0].year_views.some((elem) => elem.year === year)) {
+                        // Update existing entry
+                        const updateProduct = await histo.updateOne(filter, update);
+                        if (updateProduct.nModified === 0) {
+                            return res.status(404).json({error: 'Record not found'});
+                        }
+                    } else {
+                        // Add new entry
+                        const newEntry = {
+                            year: `${year}`,
+                            views_average: `${response_crtFive.data.moyenneViews}`,
+                        };
+                        const addNewEntry = await histo.findByIdAndUpdate(
+                            productId,
+                            { $push: {year_views: newEntry} },
+                            { new: true },
+                        );
+                        if (!addNewEntry) {
+                            return res.status(404).json({error: 'Record not found'});
+                        }
+                    }
+                    
+
+                    const updateProduct = await histo.findById(productId);
+                    res.status(200).json(updateProduct);
+            } catch(error){
+                console.log(error);
+                res.status(500).json({error: 'Server error @@'});
+            }
+
         }
     } catch (error) {
         return res.status(500).json({
