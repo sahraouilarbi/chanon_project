@@ -755,6 +755,36 @@ app.get('/api/classification', async (req, res)=>{
     }
 });
 
+/**
+ * @param {import('next').NextApiRequest} req
+ * @param {import('next').NextApiResponse} res
+ */
+app.get('/api/getrecordbyid', async (req, res) => {
+    const { id } = req.query;
+    try {
+        const record = await histo.findById(id);
+        const yearViewsInRecord = record.year_views;
+
+        if (yearViewsInRecord.length > 0) {
+            // Sort by year in 'asc' order
+            const yearViewsInRecordSorted = yearViewsInRecord.sort((a,b)=>a.year - b.year);
+
+            // Get the max value
+            const maxYearAverage = Math.max(...yearViewsInRecord.map((item)=>item.views_average));
+            console.log('max : ', maxYearAverage);
+            
+            // Send res status and data
+            res.status(200).json({ data:yearViewsInRecordSorted });
+        } else if (yearViewsInRecord.length === 0) {
+            res.status(404).json({error: 'No records found'});
+        }
+    } catch (error) {
+        res.status(500).json({
+            error: 'Server Error @10',
+        });
+    }
+
+});
 
 app.use('/api/cls', require('./routes/cls'));
 
