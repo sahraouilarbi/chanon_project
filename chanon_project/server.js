@@ -49,6 +49,8 @@ function getDatabaseName(language) {
             return '2_prolexbase_3_1_eng_data'
         case 'fr':
             return '2_prolexbase_3_1_fra_data';
+        case 'pl':
+                return '2_prolexbase_3_1_pol_data';
         default:
             return '';
     }
@@ -63,6 +65,8 @@ function getDatabaseTableName(language) {
             return 'prolexeme_eng'
         case 'fr':
             return 'alias_fra';
+        case 'pl':
+                return 'prolexeme_pol';
         default:
             return '';
     }
@@ -71,12 +75,21 @@ function getDatabaseTableName(language) {
 // Create a function to get the database table name based on the selected language
 function getDatabaseTableNameColumnName(databaseTableName) {
     switch (databaseTableName) {
+        // table 2_prolexbase_3_1_other_data
         case 'prolexeme_arb':
             return 'LABEL_PROLEXEME';
+        
+        // table 2_prolexbase_3_1_eng_data
         case 'prolexeme_eng':
             return 'LABEL_PROLEXEME'
+        
+        // table 2_prolexbase_3_1_fra_data
         case 'alias_fra':
             return 'LABEL_ALIAS';
+        
+        // table 2_prolexbase_3_1_pol_data
+        case 'prolexeme_pol':
+                return 'LABEL_PROLEXEME';
         default:
             return '';
     }
@@ -745,9 +758,29 @@ app.get('/api/fetch', async (req, res) => {
 app.get('/api/classification', async (req, res)=>{
 
     try{
-        const query = await histo.find();
+        const { language, year } = req.query; // Extract the language and year query parameters
+        
+        // Construct the query object based on provided parameters
+        const query = {};
+
+        if (language) {
+            query.lng = language;
+        }
+
+        if (year) {
+            query.year = year;
+        }
+
+        const sortOptions = { frenq: -1} // Sort by frenq field in descending order
+        
+        
+        const sortedQuery = histo.find(query).sort(sortOptions);
+
+        // Execute the sorted and filtered query
+        const data = (await sortedQuery.exec()).sort((a,b) => b.frenq - a.frenq);
+        
         return res.status(200).json({
-            data: query
+            data: data
         });
     } catch(error){
         res.status(500).json({
