@@ -303,7 +303,8 @@ app.get('/filter', async (req, res) => {
                         // oldD: result_size.length
                     })
                 } else {
-                    console.log('### app.get(filter) - result : ', results);
+                    console.log('@@@ app.get(filter) - result : ', results);
+                    return;
                     const addProduct = new histo({
                         labelprolexme: labelprolexme,
                         numpivot: results[0].NUM_PIVOT,
