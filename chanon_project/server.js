@@ -189,8 +189,8 @@ app.get('/filter', async (req, res) => {
             db.query(`SELECT * FROM ${dbTableName} where ${dbTableNameColumnName} = '${labelprolexme}'`, async (err, results) => {
 
                 if (err) {
-                    console.error('### app.get(filter) - Error executing query:', err);
-                    return res.status(500).send('Server Error #01');
+                    //console.error('### app.get(filter) - Error executing query:', err);
+                    return res.status(500).send('@01 - Server Error 500');
                 }
 
                 if (results.length === 0) {
@@ -317,7 +317,6 @@ app.get('/filter', async (req, res) => {
                     })
                 } else {
                     console.log('@@@ app.get(filter) - result : ', results);
-                    return;
                     const addProduct = new histo({
                         labelprolexme: labelprolexme,
                         numpivot: results[0].NUM_PIVOT,
@@ -387,8 +386,8 @@ app.get('/filter', async (req, res) => {
                     const updateProduct = await histo.findById(productId);
                     res.status(200).json(updateProduct);
             } catch(error){
-                console.log(error);
-                res.status(500).json({error: 'Server error @@'});
+                //console.log(error);
+                res.status(500).json({error: '@02 - Server Error 500'});
             }
 
         }
@@ -495,7 +494,7 @@ app.get('/api/nbr-contributors', async (req, res) => {
         //     sumD += dt['userid']
         // }
         
-        console.log('### app.get(/api/nbr-contributors) - sum data : ', sumD);
+        // console.log('### app.get(/api/nbr-contributors) - sum data : ', sumD);
         
         res.send({
         //  "splt": splt,
@@ -507,8 +506,8 @@ app.get('/api/nbr-contributors', async (req, res) => {
             "data": data,
         });
     } catch (error) {
-        console.log(error);
-        res.status(500).send('Server Error #02');
+        //console.log(error);
+        res.status(500).send('@03 - Server Error 500');
     }
 });
 
@@ -537,8 +536,8 @@ app.get('/api/size-item', async (req, res) => {
             "data": data,
         });
     } catch (error) {
-        console.error('### app.get(/api/size-item) - Error : ', error);
-        res.status(500).send('Server Error #03');
+        //console.error('### app.get(/api/size-item) - Error : ', error);
+        res.status(500).send('@04 - Server Error 500');
     }
 });
 
@@ -567,7 +566,7 @@ app.get('/api/nbr-internal-links', async (req, res) => {
         );
     } catch (error) {
         console.error('### app.get(/api/nbr-internak-links - Error : )', error);
-        res.status(500).send('Server Error #04');
+        res.status(500).send('@5 - Server Error 500');
     }
 });
 
@@ -584,7 +583,7 @@ app.get('/api/nbr-external-links', async (req, res) => {
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&titles=${name}&format=json&rawcontinue`);
         const data = response.data;
         const pageId = Object.keys(data.query.pages)[0];
-        const extlinks = data.query.pages[pageId].extlinks || [];
+        const extlinks = pageId != -1 ? data.query.pages[pageId].extlinks : [];
         const extlinksCount = extlinks.length;
         res.send({
             //"data": response.data,
@@ -593,8 +592,8 @@ app.get('/api/nbr-external-links', async (req, res) => {
             "size": extlinksCount
         });
     } catch (error) {
-        console.error('### app.get(/api/nbr-external-links) - Error : ',error);
-        res.status(500).send('Server Error #05');
+        //console.error('### app.get(/api/nbr-external-links) - Error : ',error);
+        res.status(500).send('@06 - Server Error 500');
     }
 });
 
@@ -607,10 +606,7 @@ app.get('/api/nbr-external-links', async (req, res) => {
  */
 app.get('/api/crt-five', async (req, res) => {
     
-    console.log('### app.get(/api/crt-five) - req.query', req.query);
     const { name, lng, year } = req.query;
-
-    console.log(req.query);
 
     try {
 
@@ -654,7 +650,7 @@ app.get('/api/crt-five', async (req, res) => {
         
     } catch (error) {
         // console.log('### app.get(/api/crt-five) - Error', error);
-        res.status(500).send('Server Error #06');
+        res.status(500).send('@07 - Server Error 500');
     }
 });
 
@@ -707,8 +703,8 @@ app.post('/api/additive_wighting', async (req, res) => {
         }
 
     } catch (error) {
-        console.log(error);
-        res.status(500).send('Server Error #07');
+        //console.log(error);
+        res.status(500).send('@08 - Server Error 500');
     }
 });
 
@@ -723,8 +719,8 @@ app.get('/api/fetch', async (req, res) => {
 
     db.query(`SELECT * FROM alias_fra`, (err, results) => {
         if (err) {
-            console.error('### app.get(/api/fetch) - Error executing query:', err);
-            return res.status(500).send('Server Error #08');
+            //console.error('### app.get(/api/fetch) - Error executing query:', err);
+            return res.status(500).send('@09 - Server Error 500');
         }
 
         res.send(results);
@@ -814,7 +810,7 @@ app.get('/api/getrecordbyid', async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({
-            error: 'Server Error @10',
+            error: '@10 - Server Error 500',
         });
     }
 
