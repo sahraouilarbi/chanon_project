@@ -4,12 +4,13 @@ const cheerio = require('cheerio');
 const fs = require('fs');
 const axios = require('axios');
 // var mysql = require('mysql');
+const cors = require('cors');
 const mysql = require('mysql2');
 const mongoose = require('mongoose');
+const { setDefaultHighWaterMark } = require('stream');
 const histo = require('./models/products');
 const cls = require('./routes/cls');
-const cors = require('cors');
-const { setDefaultHighWaterMark } = require('stream');
+const { databaseNames, tableNames, columnNames, languageMap } = require('./constants');
 const app = express();
 const PORT = 5000
 
@@ -23,82 +24,22 @@ app.use(express.json());
 app.use(cors());
 
 const logStream = fs.createWriteStream('logs.txt', { flags: 'a' });
-// var connection = mysql.createConnection({
-//     host: 'localhost',
-//     user: 'root',
-//     password: 'root',
-//     database: '2_prolexbase_3_1_eng_data'
-// });
-
-
-// Create a MySQL connection pool
-// const pool = mysql.createPool({
-//     host: 'localhost',
-//     user: 'root',
-//     password: 'root',
-//     database: '2_prolexbase_3_1_other_data',
-//     connectionLimit: 10, // Adjust the connection limit as per your requirements
-// });
 
 // Create a function to get the database name based on the selected language
 function getDatabaseName(language) {
-    switch (language) {
-        case 'ar':
-            return '2_prolexbase_3_1_other_data';
-        case 'en':
-            return '2_prolexbase_3_1_eng_data'
-        case 'fr':
-            return '2_prolexbase_3_1_fra_data';
-        case 'pl':
-                return '2_prolexbase_3_1_pol_data';
-        default:
-            return '';
-    }
+    return databaseNames[language] || '';
 }
 
 // Create a function to get the database table name based on the selected language
 function getDatabaseTableName(language) {
-    switch (language) {
-        case 'ar':
-            return 'prolexeme_arb';
-        case 'en':
-            return 'prolexeme_eng'
-        case 'fr':
-            return 'alias_fra';
-        case 'pl':
-                return 'prolexeme_pol';
-        default:
-            return '';
-    }
+    return tableNames[language] || '';
 }
 
 // Create a function to get the database table name based on the selected language
 function getDatabaseTableNameColumnName(databaseTableName) {
-    switch (databaseTableName) {
-        // table 2_prolexbase_3_1_other_data
-        case 'prolexeme_arb':
-            return 'LABEL_PROLEXEME';
-        
-        // table 2_prolexbase_3_1_eng_data
-        case 'prolexeme_eng':
-            return 'LABEL_PROLEXEME'
-        
-        // table 2_prolexbase_3_1_fra_data
-        case 'alias_fra':
-            return 'LABEL_ALIAS';
-        
-        // table 2_prolexbase_3_1_pol_data
-        case 'prolexeme_pol':
-                return 'LABEL_PROLEXEME';
-        default:
-            return '';
-    }
+    return columnNames[databaseTableName] || '';
 }
-
-
-
-
-
+  
 // middleware to log each request to the file
 /**
  * @param {import('next').NextApiRequest} req
@@ -145,13 +86,12 @@ app.get('/fetch-all-data', async (req, res) => {
         return res.status(200).json({
             data: query
         })
-    } catch (error) {
+    } catch (err) {
         return res.status(500).json({
-            message: error
+            message: err
         })
     }
 });
-
 
 // app.get('/filter', ...) defines a route that handles a GET request to filter data based on the provided query parameters (labelprolexme and lng).
 /**
@@ -163,24 +103,28 @@ app.get('/filter', async (req, res) => {
     const { labelprolexme, lng, year } = req.query;
     const currentDate = new Date();
     const currentTime = currentDate.toLocaleString();
+    
     try {
 
         const query_size = await histo.find();
-
-        // const result_size = await db.query('SELECT count(*) FROM prolexeme_arb');
         
+        // voir si le produit existe dans mongodb
         const query = await histo.find({
             "labelprolexme": labelprolexme
         });
-
-        console.log('### app.get(filter) - query.length : ', query.length);
-        console.log('### app.get(filter) - query : ', query);
         
+        function getFieldForLanguage(language) {
+            return languageMap[language] || '';
+        }
+
+        const fieldForLanguage = getFieldForLanguage(lng);
         
         let msg;
         if (query.length === 0) {
+            
+            // Le produit n'existe pas dans la base mongodb
+            
             const db = req.db;
-
             
             const dbTableName = getDatabaseTableName(lng);
 
@@ -194,121 +138,131 @@ app.get('/filter', async (req, res) => {
                 }
 
                 if (results.length === 0) {
+                    console.log('Fetch data ...')
+                    const [
+                        response_nbrContri,
+                        response_sizeItm,
+                        response_nbrInterLink,
+                        response_nbrExtrLink,
+                        response_crtFive,
+                        responseCal,
+                    ] = await Promise.all([
+                        axios.get(`http://localhost:5000/api/nbr-contributors?name=${labelprolexme}&lng=${lng}`),
+                        axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lng}`),
+                        axios.get(`http://localhost:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lng}`),
+                        axios.get(`http://localhost:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lng}`),
+                        axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`),
+                        axios.get(`http://localhost:5000/api/cls`),
+                    ]);
 
-                    console.log('### app.get(filter) - a');                    
-                    const response_nbrContri = await axios.get(`http://localhost:5000/api/nbr-contributors?name=${labelprolexme}&lng=${lng}`);
-                    console.log('======================================== Result ==============================================');
-                    
+                    if (
+                        ![
+                            response_nbrContri,
+                            response_sizeItm,
+                            response_nbrInterLink,
+                            response_nbrExtrLink,
+                            response_crtFive,
+                            responseCal,
+                        ].every(res => res.status === 200) 
+                    ){
+                        return res.status(500).json({error: 'Error fetching data - Server Error 500'});
+                    }
+
+                    // ### STEP A ###
+                    console.log('### app.get(filter) - STEP A : get nbr-Contributors');                    
+                    console.log('================================= Result =======================================');
                     console.log('### app.get(filter) - result  : ', response_nbrContri.data);
                     console.log('### app.get(filter) - result splt  : ', response_nbrContri.data.splt);
                     console.log('### app.get(filter) - result sumD  : ', response_nbrContri.data.sumD);
                     console.log('### app.get(filter) - result size : ', response_nbrContri.data.size);
                     console.log('### app.get(filter) - result data : ', response_nbrContri.data.data);
                     console.table(response_nbrContri.data.data);
-
                     //var splt = response_nbrContri.data.splt;
-                    const splt = Object.keys(response_nbrContri.data.data.query.pages)[0];
+                    var splt = Object.keys(response_nbrContri.data.data.query.pages)[0];
                     
-                    if (response_nbrContri.status === 200) {
-                        const response_sizeItm = await axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lng}`);                        console.log('### app.get(filter) - b');
-                        console.log('======================================== Result ==============================================');
-                        
-                        console.log('### app.get(filter) - response : ', response_sizeItm.data);
-                        console.log('### app.get(filter) - result data : ', response_sizeItm.data.data);
-                        //console.log('### app.get(filter) - result page id : ', response_sizeItm.data.data.query.pages[splt]);
-                        
-                        const splt_ = Object.keys(response_sizeItm.data.data.query.pages)[0];
-                        
-                        console.log('### app.get(filter) - result page id  : ', response_sizeItm.data.data.query.pages[splt_].pageid);
-                        console.log('### app.get(filter) - result size : ', splt != -1 ? response_sizeItm.data.data.query.pages[splt_].revisions[0].size : 0);
-                        
-                        const response_nbrInterLink = await axios.get(`http://localhost:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lng}`);
-                        console.log('### app.get(filter) - c');
-                        console.log('======================================== Result ==============================================');
-                        
-                        console.log('### app.get(filter) - response : ', response_nbrInterLink);
-                        console.log('### app.get(filter) - response data  : ', response_nbrInterLink.data);
-                        console.log('### app.get(filter) - response data sum: ', response_nbrInterLink.data.sum);
-                        console.log('### app.get(filter) - response data size: ', response_nbrInterLink.data.size);
-                        console.table(response_nbrInterLink.data.data.query.backlinks);
-                        
-                        console.log(response_nbrInterLink.status);
-                        if (response_nbrInterLink.status == '200') {
-                            const response_nbrExtrLink = await axios.get(`http://localhost:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lng}`);
-                            console.log('### app.get(filter) - d');
-                            console.log('======================================== Result ==============================================');
-                            
-                            console.log('### app.get(filter) - response : ', response_nbrExtrLink);
-                            console.log('### app.get(filter) - response data : ', response_nbrExtrLink.data);
-                            console.table(response_nbrExtrLink.data);
-                            console.log('### app.get(filter) - response data size : ', response_nbrExtrLink.data.size);
-                            console.log('### app.get(filter) - response status : ', response_nbrExtrLink.status);
-                            
-                            
-                            if (response_nbrExtrLink.status === 200) {
-                                // console.log('qrt five');
-                                const response_crtFive = await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`);
-                                
-                                console.log('======================================== Result ==============================================');
-                                console.log('### app.get(filter) -  crt five : ', response_crtFive);
-                                console.log('### app.get(filter) -  crt five data : ', response_crtFive.data.datasiz);
-                                console.table(response_crtFive.data.datasiz);
-                                // console.table(response_crtFive.data);
-                                console.log('### app.get(filter) -  crt five sumTotale: ', response_crtFive.data.sumTotale);
-                                console.log('### app.get(filter) -  crt five size: ', response_crtFive.data.size);
-                                console.log('### app.get(filter) -  crt five rowHist: ', response_crtFive.data.rowofhits);
-                                console.log('### app.get(filter) -  crt five : histVal', response_crtFive.data.hitsValue);
-                                console.log('### app.get(filter) - crt five moyenneViews', response_crtFive.data.moyenneViews);
-                                console.log('### app.get(filter) -  crt five status', response_crtFive.status);
-                                
-                                if (response_crtFive.status === 200) {
-                                    const casl = await axios.post(`http://localhost:5000/api/additive_wighting`, {
-                                        normTable: response_crtFive.data.rowofhits,
-                                        wight: response_crtFive.data.sumTotale
-                                    });
-                                    // console.log('cal : ', cal);
-                                    const cal = await axios.get(`http://localhost:5000/api/cls`);                                    
-                                    console.log('### app.get(filter) - notoritie : ', cal.data.data);
-                                    if (cal.data.data === 1 || cal.data.data === 2) {
-                                        console.log('### newProduct : start insert');
-                                
-                                        const revisionPageId = Object.keys(response_sizeItm.data.data.query.pages)[0];
-                                
-                                        revisionSizeData = response_sizeItm.data.data.query.pages[revisionPageId].revisions
-                                
+                    // ### STEP A ###
+                    console.log('### app.get(filter - STEP B : get size-item');
+                    console.log('================================= Result =======================================');
+                    console.log('### app.get(filter) - response : ', response_sizeItm.data);
+                    console.log('### app.get(filter) - result data : ', response_sizeItm.data.data);
+                    //console.log('### app.get(filter) - result page id : ', response_sizeItm.data.data.query.pages[splt]);
+                    const _responseSizeItmPageIdNode = Object.keys(response_sizeItm.data.data.query.pages)[0];
+                    const _responseSizeItmPageId = _responseSizeItmPageIdNode != -1 ? response_sizeItm.data.data.query.pages[_responseSizeItmPageIdNode].pageid : null;
+                    const responseSizeItmREvisionsSize = _responseSizeItmPageId ? response_sizeItm.data.data.query.pages[_responseSizeItmPageId].revisions[0].size : 0;
+                    console.log('### app.get(filter) - result page id  : ', _responseSizeItmPageId);
+                    console.log('### app.get(filter) - result size : ', _responseSizeItmPageIdNode != -1 ?  responseSizeItmREvisionsSize : 0);
+                    
+                    // ### STEP C ###
+                    console.log('### app.get(filter) - STEP C : get nbr-internal-links');
+                    console.log('================================= Result =======================================');
+                    console.log('### app.get(filter) - response : ', response_nbrInterLink);
+                    console.log('### app.get(filter) - response data  : ', response_nbrInterLink.data);
+                    console.log('### app.get(filter) - response data sum: ', response_nbrInterLink.data.sum);
+                    console.log('### app.get(filter) - response data size: ', response_nbrInterLink.data.size);
+                    console.table(response_nbrInterLink.data.data.query.backlinks);
+                    console.log(response_nbrInterLink.status);
                                         
-                                        const addProduct = new histo({
-                                            labelprolexme: labelprolexme,
-                                            numpivot: `1552`,
-                                            nbrauthores: `${response_nbrContri.data.sumD}`,
-                                            extlink: `${response_nbrExtrLink.data.size}`,
-                                            hists: `${response_crtFive.data.hitsValue}`,
-                                            sizedata: `${revisionSizeData}`,
-                                            pagerankwiki: `${response_crtFive.data.sumTotale}`,
-                                            frenq: `2`,
-                                            wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
-                                            date: currentTime,
-                                            lng: lng,
-                                            type: 'person',
-                                            year_views:[
-                                                {
-                                                    year: `${year}`,
-                                                    views_average: `${response_crtFive.data.moyenneViews}`,
-                                                }
-                                            ],
-                                        });
-                                        const newProducts = await addProduct.save();
-                                        console.log('### newProducts : end insert');
+                    // ### STEP D ###
+                    console.log('### app.get(filter) - STEP D : get nbr-external-links');
+                    console.log('================================= Result =======================================');
+                    console.log('### app.get(filter) - response : ', response_nbrExtrLink);
+                    console.log('### app.get(filter) - response data : ', response_nbrExtrLink.data);
+                    console.table(response_nbrExtrLink.data);
+                    console.log('### app.get(filter) - response data size : ', response_nbrExtrLink.data.size);
+                    console.log('### app.get(filter) - response status : ', response_nbrExtrLink.status);
+                
+                    // ### STEP E ###
+                    // console.log('qrt five');
+                    console.log('### app.get(filter) - STEP E : get crt-five');
+                    console.log('================================= Result =======================================');
+                    console.log('### app.get(filter) -  crt five : ', response_crtFive);
+                    console.log('### app.get(filter) -  crt five data : ', response_crtFive.data.datasiz);
+                    console.table(response_crtFive.data.datasiz);
+                    // console.table(response_crtFive.data);
+                    console.log('### app.get(filter) - crt five sumTotale: ', response_crtFive.data.sumTotale);
+                    console.log('### app.get(filter) - crt five size: ', response_crtFive.data.size);
+                    console.log('### app.get(filter) - crt five rowHist: ', response_crtFive.data.rowofhits);
+                    console.log('### app.get(filter) - crt five : histVal', response_crtFive.data.hitsValue);
+                    console.log('### app.get(filter) - crt five moyenneViews', response_crtFive.data.moyenneViews);
+                    console.log('### app.get(filter) - crt five status', response_crtFive.status);
+                    
+                    const casl = await axios.post(`http://localhost:5000/api/additive_wighting`, {
+                        normTable: response_crtFive.data.rowofhits,
+                        wight: response_crtFive.data.sumTotale
+                    });
+                    
+                    // console.log('cal : ', cal);
+                    console.log('### app.get(filter) - notority : ', responseCal.data.data);
 
-                                    }
+                    console.log('### newProduct : start insert');
+            
+                    const addProduct = new histo({
+                        labelprolexme: labelprolexme,
+                        [fieldForLanguage]: {
+                            numpivot: '',
+                            nbrauthores: `${response_nbrContri.data.sumD}`,
+                            extlink: `${response_nbrExtrLink.data.size}`,
+                            hists: `${response_crtFive.data.hitsValue}`,
+                            sizedata: `${responseSizeItmREvisionsSize}`,
+                            pagerankwiki: `${response_crtFive.data.sumTotale}`,
+                            frenq: `${responseCal.data.data}`,
+                            wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
+                            date: currentTime,
+                            lng: lng,
+                            type: 'from web',
+                            year_views: [
+                                {
+                                    year: `${year}`,
+                                    views_average: `${response_crtFive.data.moyenneViews}`,
+                                    notoriety: responseCal.data.data === 1 || responseCal.data.data === 2 ? `${responseCal.data.data}` : '2'
                                 }
-
-                            } else {
-                                console.log('### app.get(filter) - rah fal 3aks');
-                            }
-                        } else {
-                        }
-                    }
+                            ],
+                        } 
+                    });
+            
+                    const newProducts = await addProduct.save();
+                    console.log('### newProducts : end insert');
+                    
                     return res.status(200).json({
                         data: query,
                         messA: 'test',
@@ -316,21 +270,32 @@ app.get('/filter', async (req, res) => {
                         // oldD: result_size.length
                     })
                 } else {
-                    console.log('@@@ app.get(filter) - result : ', results);
+                    console.log(results);
+
                     const addProduct = new histo({
                         labelprolexme: labelprolexme,
-                        numpivot: results[0].NUM_PIVOT,
-                        nbrauthores: '',
-                        extlink: results[0].WIKIPEDIA_LINK,
-                        hists: results[0].SORT,
-                        sizedata: '',
-                        pagerankwiki: '',
-                        frenq: results[0].NUM_FREQUENCY,
-                        wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
-                        date: currentTime,
-                        lng: lng,
-                        type: ''
+                        [fieldForLanguage]: {
+                            numpivot: results[0].NUM_PIVOT ??= '',
+                            nbrauthores: '',
+                            extlink: results[0].WIKIPEDIA_LINK ??= '',
+                            hists: results[0].SORT ??= '',
+                            sizedata: '',
+                            pagerankwiki: '',
+                            frenq: results[0].NUM_FREQUENCY ??= '',
+                            wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
+                            date: currentTime,
+                            lng: lng,
+                            type: 'mysql',
+                            year_views: [
+                                {
+                                    year: `${year}`,
+                                    views_average: '',
+                                    notoriety: results[0].NUM_FREQUENCY ??='2'
+                                }
+                            ],
+                        }
                     });
+    
                     const newProducts = await addProduct.save();
                 }
 
@@ -339,62 +304,224 @@ app.get('/filter', async (req, res) => {
                     messB: 'test',
                 })
             });
-        } else {
-            // update product
-            console.log('update product');
-            const response_crtFive = await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`);
-            
-            try{
-                    const reQuery = await histo.find({"labelprolexme": labelprolexme});
-                    console.log('@@ reQuery', reQuery);
-                    const productId = reQuery[0]._id;
-                    console.log('@@ productId to update',productId);
+        } else if (!query[0][fieldForLanguage]){
+                // Le produit existe dans mongodb
+    
+                // Voir si le produit exist dans la langue selectionnée
+                
+                console.log('labelprolexme does not exist in the selected language :', labelprolexme, fieldForLanguage);
+                
+                // Fetch data
+                console.log('Fetch data ...');
+                const [
+                    responseNbrContri,
+                    responseSizeItm,
+                    responseNbrInterLink,
+                    responseNbrExtrLink,
+                    responseCrtFive,
+                    responseCal
+                ] = await Promise.all([
+                    axios.get(`http://localhost:5000/api/nbr-contributors?name=${labelprolexme}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`),
+                    axios.get(`http://localhost:5000/api/cls`)
+                ]);
 
-                    const filter = {
-                        _id: productId,
-                        'year_views.year': year,
-                    };
+                console.log('Fetched data OK');
+
+                // Handle errors
+                if(
+                    ![
+                        responseNbrContri, 
+                        responseSizeItm, 
+                        responseNbrInterLink, 
+                        responseNbrExtrLink,
+                        responseCrtFive,
+                        responseCal
+                    ].every(res => res.status === 200)
+                ) {
+                    return res.status(500).json({error: 'Error fetching data - Server Error 500'});
+                }
+
+                const nbrContri = responseNbrContri.data.size;
+                console.log('@ nbrContri ->',nbrContri);
+                console.log('----------------------------------------------');
+
+                const sizeItm = responseSizeItm.data.size;
+                console.log('@ sizeItm ->',sizeItm);
+                console.log('----------------------------------------------');
+
+                
+                console.log('@ responseNbrInterLink ->',responseNbrInterLink.data.size);
+                console.log('----------------------------------------------');
+
+                const nbrExtrLink = responseNbrExtrLink.data.size;
+                console.log('@ nbrExtrLink ->',nbrExtrLink);
+                console.log('----------------------------------------------');
+                
+                const crtFiveHitsValue = `${responseCrtFive.data.hitsValue}`;
+                console.log('@ crtFiveHitsValue ->',crtFiveHitsValue);
+                console.log('----------------------------------------------');
+
+                const crtFiveSumTotale = responseCrtFive.data.sumTotale;
+                console.log('@ crtFiveSumTotale ->',crtFiveSumTotale);
+
+                const crtFiveMoyenneViews = responseCrtFive.data.moyenneViews;
+                console.log('@ crtFiveMoyenneViews ->',crtFiveMoyenneViews);
+                console.log('----------------------------------------------');
+
+                const cal = responseCal.data.data;
+                console.log('@ cal ->',cal);
+                console.log('----------------------------------------------');
+                
+                // Créer l'enregistrement language
+                try  {
+                    const newEntry = {
+                            numpivot: '',
+                            nbrauthores: nbrContri,
+                            extlink: nbrExtrLink,
+                            hists: crtFiveHitsValue,
+                            sizedata: sizeItm,
+                            pagerankwiki: crtFiveSumTotale,
+                            frenq: '2',
+                            wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
+                            date: currentTime,
+                            lng: lng,
+                            type: '',
+                            year_views: [
+                                {
+                                    year: `${year}`,
+                                    views_average: crtFiveMoyenneViews,
+                                    notoriety: cal === 1 || cal === 2 ? `${cal}` : '2'
+                                }
+                            ], 
+                    }
 
                     const update = {
                         $set: {
-                            'year_views.$.views_average': `${response_crtFive.data.moyenneViews}`,
+                            [fieldForLanguage]: newEntry
                         }
                     }
-                    if(reQuery[0].year_views.some((elem) => elem.year === year)) {
-                        // Update existing entry
-                        const updateProduct = await histo.updateOne(filter, update);
-                        if (updateProduct.nModified === 0) {
-                            return res.status(404).json({error: 'Record not found'});
-                        }
-                    } else {
-                        // Add new entry
-                        const newEntry = {
-                            year: `${year}`,
-                            views_average: `${response_crtFive.data.moyenneViews}`,
-                        };
-                        const addNewEntry = await histo.findByIdAndUpdate(
-                            productId,
-                            { $push: {year_views: newEntry} },
-                            { new: true },
-                        );
-                        if (!addNewEntry) {
-                            return res.status(404).json({error: 'Record not found'});
-                        }
-                    }
+
+                    const productId = query[0]._id;
                     
+                    console.log('start adding new entry ...');
+                    
+                    const addNewEntry = await histo.findOneAndUpdate(
+                        { _id: productId }, 
+                        update
+                    );
+
+                    console.log('---');
+                    console.log(addNewEntry);
+                    console.log('---');
+                    if (!addNewEntry){
+                        return res.status(404).json({error: 'Record not found'});
+                    }
+                    console.log('new entry added');
+                    const updateProduct = await histo.findById(productId);
+                    console.log('product updated', updateProduct);
+                    res.status(200).json(updateProduct);
+
+                } catch(err) {
+                    console.error(err);
+                    res.status(500).json(err);
+                }
+                
+
+            } else {
+            
+            // Get year_views array
+            const yearViews = query[0][fieldForLanguage].year_views;
+            
+            // Check if year entry exist
+            const yearEntry = yearViews.find(y => y.year === year);
+
+            // update Product Year
+            const productId = query[0]._id;
+            
+            const filter = {
+                _id: productId,
+                //'year_views.year': year,
+                [`${fieldForLanguage}.year_views.year`]: year,
+            };
+
+            const [
+                response_crtFive,
+                cal
+            ] = await Promise.all([
+                await axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`),
+                await axios.get(`http://localhost:5000/api/cls`)
+            ]);
+
+            if (
+                ![
+                    response_crtFive,
+                    cal
+                ].every(res => res.status === 200)
+            ){
+                return res.status(500).json({error: 'Error fetching data - Server Error 500'});
+            }
+           
+            const update = {
+                $set: {
+                    //'year_views.$.views_average': `${response_crtFive.data.moyenneViews}`,
+                    [`${fieldForLanguage}.year_views.$.views_average`]: `${response_crtFive.data.moyenneViews}`,
+                }
+            }
+
+            if (!yearEntry) {
+                // Year doesn't exist, add it
+                
+                try {
+
+                    // Add new entry
+                    const newEntry = {
+                        year: `${year}`,
+                        views_average: `${response_crtFive.data.moyenneViews}`,
+                        notoriety: cal.data.data === 1 || cal.data.data === 2 ? `${cal.data.data}` : '2'
+                    };
+                    const yearViewsPath = `${fieldForLanguage}.year_views`;
+                    const addNewEntry = await histo.findByIdAndUpdate(
+                        productId,
+                        { $push: {[yearViewsPath]: newEntry} },
+                        { new: true },
+                    );
+                    if (!addNewEntry) {
+                        return res.status(404).json({error: 'Record not found'});
+                    }
 
                     const updateProduct = await histo.findById(productId);
                     res.status(200).json(updateProduct);
-            } catch(error){
-                //console.log(error);
-                res.status(500).json({error: '@02 - Server Error 500'});
-            }
+                    
+                } catch(error){
+                    res.status(500).json({error: '@02-01 - Server Error 500'});
+                }
 
+            } else {
+                try{
+                    // Year exist, update it
+                    console.log('@@ update existing year entry');
+    
+                    const updateProduct = await histo.findOneAndUpdate(
+                        filter, 
+                        { $set: { "year_views.$[selectedYear]" : update} },
+                        { arrayFilters: [ { "selectedYear" : year } ] }
+                    );
+                    if (updateProduct.nModified === 0) {
+                        return res.status(404).json({error: 'Record not found'});
+                    }
+                    res.status(200).json(updateProduct);
+                } catch(error){
+                    res.status(500).json({error: '@02-02 - Server Error 500'});
+                }
+            }
+            
         }
     } catch (error) {
-        return res.status(500).json({
-            message: error
-        })
+        return res.status(500).json({message: error});
     }
 });
 
@@ -495,7 +622,7 @@ app.get('/api/nbr-contributors', async (req, res) => {
         // }
         
         // console.log('### app.get(/api/nbr-contributors) - sum data : ', sumD);
-        
+
         res.send({
         //  "splt": splt,
             "splt": pageId,
@@ -519,8 +646,7 @@ app.get('/api/nbr-contributors', async (req, res) => {
  * @param {import('next').NextApiResponse} res
  */
 app.get('/api/size-item', async (req, res) => {
-    const { name, splt, lng } = req.query;
-    console.log('###-### ###-###',req.query);
+    const { name, lng } = req.query;
     try {
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=size&format=json&titles=${name}&redirects`);
 
@@ -566,7 +692,7 @@ app.get('/api/nbr-internal-links', async (req, res) => {
         );
     } catch (error) {
         console.error('### app.get(/api/nbr-internak-links - Error : )', error);
-        res.status(500).send('@5 - Server Error 500');
+        res.status(500).send('@05 - Server Error 500');
     }
 });
 
@@ -583,7 +709,12 @@ app.get('/api/nbr-external-links', async (req, res) => {
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&titles=${name}&format=json&rawcontinue`);
         const data = response.data;
         const pageId = Object.keys(data.query.pages)[0];
-        const extlinks = pageId != -1 ? data.query.pages[pageId].extlinks : [];
+
+        const extlinks = pageId != -1 
+            ? (data.query.pages[pageId].extlinks) 
+                ? data.query.pages[pageId].extlinks
+                :[]
+            : [];
         const extlinksCount = extlinks.length;
         res.send({
             //"data": response.data,
@@ -631,7 +762,6 @@ app.get('/api/crt-five', async (req, res) => {
                 let histV = data[i]['views'] * ((i + 1) / size);
                 rowofhits.push(Math.round(histV));
                 sumHitV += Math.round(histV);
-                console.log('histV : ', histV);
                 hitsValue.push(sumHitV);
                 // Somme des views sur une année
                 sommeViews += data[i]['views'];
@@ -648,8 +778,8 @@ app.get('/api/crt-five', async (req, res) => {
             });
         }
         
-    } catch (error) {
-        // console.log('### app.get(/api/crt-five) - Error', error);
+    } catch (err) {
+        console.error(err);
         res.status(500).send('@07 - Server Error 500');
     }
 });
@@ -686,8 +816,8 @@ app.post('/api/additive_wighting', async (req, res) => {
     console.log('norm Table : ', normTable);
     try {
         const cls = await axios.get(`http://localhost:5000/api/cls`);
-        console.log('saw : ', cls);
-        console.log('saw : ', cls.data.data);
+        // console.log('@ saw : ', cls);
+        // console.log('# saw : ', cls.data.data);
         // const ntr = cls
         res.send('cls');
 
@@ -753,35 +883,49 @@ app.get('/api/fetch', async (req, res) => {
  */
 app.get('/api/classification', async (req, res)=>{
 
+    const { language, year } = req.query; // Extract the language and year query parameters
+
+    const query = {};
+
+    function getFieldForLanguage(language) {
+        return languageMap[language] || '';
+    }
+
+    let fieldForLanguage = '';
+    
+    if (language) {
+        fieldForLanguage = getFieldForLanguage(language);
+        const lngPath = `${fieldForLanguage}.lng`;
+        query[lngPath] = language;
+        
+        if (year) {
+            const yearPath = `${fieldForLanguage}.year_views.year`;
+            query[yearPath] = year;
+        }
+    }
+    
     try{
-        const { language, year } = req.query; // Extract the language and year query parameters
         
         // Construct the query object based on provided parameters
-        const query = {};
+        
+        const data = await histo.find(query)
+                                .sort({ frenq: -1})
+                                .limit(100)
+                                .lean()
+                                .exec();
 
-        if (language) {
-            query.lng = language;
+        return res.status(200).json({ data: data });
+
+    } catch(err){
+        if(!language){
+            return res.status(400).json({error: 'Language required'});
         }
 
-        if (year) {
-            query.year = year;
+        if(err.kind === 'ObjectId'){
+            return res.status(400).json({error: 'Invalid ID'});
         }
-
-        const sortOptions = { frenq: -1} // Sort by frenq field in descending order
         
-        
-        const sortedQuery = histo.find(query).sort(sortOptions);
-
-        // Execute the sorted and filtered query
-        const data = (await sortedQuery.exec()).sort((a,b) => b.frenq - a.frenq);
-        
-        return res.status(200).json({
-            data: data
-        });
-    } catch(error){
-        res.status(500).json({
-            message: error
-        })
+        res.status(500).json({message: err});
     }
 });
 
@@ -790,27 +934,38 @@ app.get('/api/classification', async (req, res)=>{
  * @param {import('next').NextApiResponse} res
  */
 app.get('/api/getrecordbyid', async (req, res) => {
-    const { id } = req.query;
+    const { id, lng } = req.query;
+
+    function getFieldForLanguage(language) {
+        return languageMap[language] || '';
+    }
+    let record;
+    let yearViewsInRecord;
     try {
-        const record = await histo.findById(id);
-        const yearViewsInRecord = record.year_views;
+        
+        if (id) {
+            record = await histo.findById(id);
+        }
+
+        if (lng) {
+            const fieldForLanguage = getFieldForLanguage(lng);
+            yearViewsInRecord = record[fieldForLanguage].year_views;
+        }
+        
 
         if (yearViewsInRecord.length > 0) {
             // Sort by year in 'asc' order
             const yearViewsInRecordSorted = yearViewsInRecord.sort((a,b)=>a.year - b.year);
 
-            // Get the max value
-            const maxYearAverage = Math.max(...yearViewsInRecord.map((item)=>item.views_average));
-            console.log('max : ', maxYearAverage);
-            
             // Send res status and data
             res.status(200).json({ data:yearViewsInRecordSorted });
         } else if (yearViewsInRecord.length === 0) {
             res.status(404).json({error: 'No records found'});
         }
-    } catch (error) {
+    } catch (err) {
         res.status(500).json({
             error: '@10 - Server Error 500',
+            message: err
         });
     }
 
