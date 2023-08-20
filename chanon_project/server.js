@@ -496,7 +496,7 @@ app.get('/filter', async (req, res) => {
                     const updateProduct = await histo.findById(productId);
                     res.status(200).json(updateProduct);
                     
-                } catch(error){
+                } catch(err){
                     res.status(500).json({error: '@02-01 - Server Error 500'});
                 }
 
@@ -514,14 +514,14 @@ app.get('/filter', async (req, res) => {
                         return res.status(404).json({error: 'Record not found'});
                     }
                     res.status(200).json(updateProduct);
-                } catch(error){
+                } catch(err){
                     res.status(500).json({error: '@02-02 - Server Error 500'});
                 }
             }
             
         }
-    } catch (error) {
-        return res.status(500).json({message: error});
+    } catch (err) {
+        return res.status(500).json({message: err});
     }
 });
 
@@ -555,9 +555,9 @@ app.post('/addhisto', async (req, res) => {
         return res.status(201).json({
             data: newProducts
         })
-    } catch (error) {
+    } catch (err) {
         return res.status(500).json({
-            message: error
+            message: err
         })
     }
 
@@ -588,8 +588,8 @@ app.get("/api/scrap", async (req, res) => {
                 res.send(title);
             }
         });
-    } catch (error) {
-        console.log('### app.get(/api/scrap) - error : ', error);
+    } catch (err) {
+        console.log('### app.get(/api/scrap) - error : ', err);
     }
 });
 
@@ -606,35 +606,42 @@ app.get('/api/nbr-contributors', async (req, res) => {
     try {
       //const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&titles=${name}&prop=contributors&pclimit=max&format=json&nonredirects&rawcontinue`);
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&titles=${name}&prop=contributors&pclimit=max&format=json&rawcontinue`);
-        let sumD = 0;
-
-        const data = response.data;
-
-        const pageId = Object.keys(data.query.pages)[0];
-
-        const contributorsCount = pageId != -1 ? data.query.pages[pageId].contributors.length : 0;
-
-        // console.log('### app.get(/api/nbr-contributors) - page id : ', response.data['query-continue'].contributors.pccontinue);
-        // var splt = response.data['query-continue'].contributors.pccontinue.split('|')[0];
-        // console.log('### app.get(/api/nbr-contributors) - after split : ', splt);
-        // for (let dt of response.data.query.pages[splt].contributors) {
-        //     sumD += dt['userid']
-        // }
         
-        // console.log('### app.get(/api/nbr-contributors) - sum data : ', sumD);
+        if (response.status === 200){
 
-        res.send({
-        //  "splt": splt,
-            "splt": pageId,
-        //  "sumD": sumD,
-        //  "size": response.data.query.pages[splt].contributors.length,
-            "size": contributorsCount,
-        //  "data": response.data,
-            "data": data,
-        });
-    } catch (error) {
+            let sumD = 0;
+
+            const data = response.data;
+    
+            const pageId = Object.keys(data.query.pages)[0];
+    
+            const contributorsCount = pageId != -1 ? data.query.pages[pageId].contributors.length : 0;
+    
+            // console.log('### app.get(/api/nbr-contributors) - page id : ', response.data['query-continue'].contributors.pccontinue);
+            // var splt = response.data['query-continue'].contributors.pccontinue.split('|')[0];
+            // console.log('### app.get(/api/nbr-contributors) - after split : ', splt);
+            // for (let dt of response.data.query.pages[splt].contributors) {
+            //     sumD += dt['userid']
+            // }
+            
+            // console.log('### app.get(/api/nbr-contributors) - sum data : ', sumD);
+    
+            res.send({
+            //  "splt": splt,
+                "splt": pageId,
+            //  "sumD": sumD,
+            //  "size": response.data.query.pages[splt].contributors.length,
+                "size": contributorsCount,
+            //  "data": response.data,
+                "data": data,
+            });
+
+        }
+        
+    } catch (err) {
         //console.log(error);
-        res.status(500).send('@03 - Server Error 500');
+        //res.status(500).send('@03 - Server Error 500');
+        res.status(500).json({error: '@03 - Server Error 500'});
     }
 });
 
@@ -661,9 +668,9 @@ app.get('/api/size-item', async (req, res) => {
             // "data": response.data,
             "data": data,
         });
-    } catch (error) {
+    } catch (err) {
         //console.error('### app.get(/api/size-item) - Error : ', error);
-        res.status(500).send('@04 - Server Error 500');
+        res.status(500).json({error: '@04 - Server Error 500'});
     }
 });
 
@@ -677,7 +684,7 @@ app.get('/api/nbr-internal-links', async (req, res) => {
     const { name, lng } = req.query;
 
     try {
-        // const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&list=backlinks&bllimit=max&bltitle=${name}&blfilterredir=nonredirects&format=json&raccontinue`);
+     // const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&list=backlinks&bllimit=max&bltitle=${name}&blfilterredir=nonredirects&format=json&raccontinue`);
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&list=backlinks&bllimit=max&bltitle=${name}&blfilterredir=nonredirects&format=json&rawcontinue`);
         let sum = 0;
         for (let dt of response.data.query.backlinks) {
@@ -690,9 +697,9 @@ app.get('/api/nbr-internal-links', async (req, res) => {
                 "data": response.data,
             }
         );
-    } catch (error) {
-        console.error('### app.get(/api/nbr-internak-links - Error : )', error);
-        res.status(500).send('@05 - Server Error 500');
+    } catch (err) {
+        console.error('### app.get(/api/nbr-internak-links - Error : )', err);
+        res.status(500).json({error: '@05 - Server Error 500'});
     }
 });
 
@@ -705,7 +712,7 @@ app.get('/api/nbr-internal-links', async (req, res) => {
 app.get('/api/nbr-external-links', async (req, res) => {
     const { name, lng } = req.query;
     try {
-        // const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&bltitle=${name}&format=json&rawcontinue`);
+     // const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&bltitle=${name}&format=json&rawcontinue`);
         const response = await axios.get(`http://${lng}.wikipedia.org/w/api.php?action=query&prop=extlinks&ellimit=max&titles=${name}&format=json&rawcontinue`);
         const data = response.data;
         const pageId = Object.keys(data.query.pages)[0];
@@ -722,9 +729,9 @@ app.get('/api/nbr-external-links', async (req, res) => {
             //"size": response.data.limits.extlinks
             "size": extlinksCount
         });
-    } catch (error) {
+    } catch (err) {
         //console.error('### app.get(/api/nbr-external-links) - Error : ',error);
-        res.status(500).send('@06 - Server Error 500');
+        res.status(500).json({error: '@06 - Server Error 500'});
     }
 });
 
@@ -766,7 +773,7 @@ app.get('/api/crt-five', async (req, res) => {
                 // Somme des views sur une année
                 sommeViews += data[i]['views'];
             }
-            moyenneViews = sommeViews / size
+            moyenneViews = sommeViews / size            
             res.send({
                 "datasiz": response.data.items,
                 "sumTotale": sumHitV,
@@ -776,11 +783,15 @@ app.get('/api/crt-five', async (req, res) => {
                 // moyenne des views sur une année
                 "moyenneViews":moyenneViews,
             });
-        }
+        } 
         
     } catch (err) {
-        console.error(err);
-        res.status(500).send('@07 - Server Error 500');
+        console.error(err.response.status);
+        if ( err.response.status === 404 ){
+            res.status(404).json({error: 'Not found'});
+        } else {
+            res.status(500).json({error: '@07 - Server Error 500'});  
+        }
     }
 });
 
@@ -832,9 +843,9 @@ app.post('/api/additive_wighting', async (req, res) => {
             }
         }
 
-    } catch (error) {
+    } catch (err) {
         //console.log(error);
-        res.status(500).send('@08 - Server Error 500');
+        res.status(500).json({error: '@08 - Server Error 500'});
     }
 });
 
@@ -850,7 +861,7 @@ app.get('/api/fetch', async (req, res) => {
     db.query(`SELECT * FROM alias_fra`, (err, results) => {
         if (err) {
             //console.error('### app.get(/api/fetch) - Error executing query:', err);
-            return res.status(500).send('@09 - Server Error 500');
+            return res.status(500).json({error: '@09 - Server Error 500'});
         }
 
         res.send(results);
