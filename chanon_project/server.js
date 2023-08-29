@@ -5,14 +5,17 @@ const fs = require('fs');
 const axios = require('axios');
 // var mysql = require('mysql');
 const cors = require('cors');
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise');
 const mongoose = require('mongoose');
 const { setDefaultHighWaterMark } = require('stream');
 const histo = require('./models/products');
 const cls = require('./routes/cls');
 const { databaseNames, tableNames, columnNames, languageMap } = require('./constants');
 const app = express();
-const PORT = 5000
+const PORT = 5000;
+const dbHost = 'localhost';
+const dbUser = 'root';
+const dbPassword = 'root';
 
 // mongoDB
 mongoose.connect("mongodb://localhost:27017/chanonpro");
@@ -53,9 +56,9 @@ app.use((req, res, next) => {
 
     // Create a MySQL connection pool
     const pool = mysql.createPool({
-        host: 'localhost',
-        user: 'root',
-        password: 'root',
+        host: dbHost,
+        user: dbUser,
+        password: dbPassword,
         database: databaseName,
         connectionLimit: 10, // Adjust the connection limit as per your requirements
     });
@@ -129,181 +132,175 @@ app.get('/filter', async (req, res) => {
             const dbTableName = getDatabaseTableName(lng);
 
             const dbTableNameColumnName = getDatabaseTableNameColumnName(dbTableName);
-            
-            db.query(`SELECT * FROM ${dbTableName} where ${dbTableNameColumnName} = '${labelprolexme}'`, async (err, results) => {
 
-                if (err) {
-                    //console.error('### app.get(filter) - Error executing query:', err);
-                    return res.status(500).send('@01 - Server Error 500');
-                }
+            results = await db.query(`SELECT * FROM ${dbTableName} where ${dbTableNameColumnName} = '${labelprolexme}'`); 
 
-                if (results.length === 0) {
-                    console.log('Fetch data ...')
-                    const [
+            if (results.length === 0) {
+                console.log('Fetch data ...')
+                const [
+                    response_nbrContri,
+                    response_sizeItm,
+                    response_nbrInterLink,
+                    response_nbrExtrLink,
+                    response_crtFive,
+                    responseCal,
+                ] = await Promise.all([
+                    axios.get(`http://localhost:5000/api/nbr-contributors?name=${labelprolexme}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lng}`),
+                    axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`),
+                    axios.get(`http://localhost:5000/api/cls`),
+                ]);
+
+                if (
+                    ![
                         response_nbrContri,
                         response_sizeItm,
                         response_nbrInterLink,
                         response_nbrExtrLink,
                         response_crtFive,
                         responseCal,
-                    ] = await Promise.all([
-                        axios.get(`http://localhost:5000/api/nbr-contributors?name=${labelprolexme}&lng=${lng}`),
-                        axios.get(`http://localhost:5000/api/size-item?name=${labelprolexme}&splt=${splt}&lng=${lng}`),
-                        axios.get(`http://localhost:5000/api/nbr-internal-links?name=${labelprolexme}&lng=${lng}`),
-                        axios.get(`http://localhost:5000/api/nbr-external-links?name=${labelprolexme}&lng=${lng}`),
-                        axios.get(`http://localhost:5000/api/crt-five?name=${labelprolexme}&lng=${lng}&year=${year}`),
-                        axios.get(`http://localhost:5000/api/cls`),
-                    ]);
-
-                    if (
-                        ![
-                            response_nbrContri,
-                            response_sizeItm,
-                            response_nbrInterLink,
-                            response_nbrExtrLink,
-                            response_crtFive,
-                            responseCal,
-                        ].every(res => res.status === 200) 
-                    ){
-                        return res.status(500).json({error: 'Error fetching data - Server Error 500'});
-                    }
-
-                    // ### STEP A ###
-                    console.log('### app.get(filter) - STEP A : get nbr-Contributors');                    
-                    console.log('================================= Result =======================================');
-                    console.log('### app.get(filter) - result  : ', response_nbrContri.data);
-                    console.log('### app.get(filter) - result splt  : ', response_nbrContri.data.splt);
-                    console.log('### app.get(filter) - result sumD  : ', response_nbrContri.data.sumD);
-                    console.log('### app.get(filter) - result size : ', response_nbrContri.data.size);
-                    console.log('### app.get(filter) - result data : ', response_nbrContri.data.data);
-                    console.table(response_nbrContri.data.data);
-                    //var splt = response_nbrContri.data.splt;
-                    var splt = Object.keys(response_nbrContri.data.data.query.pages)[0];
-                    
-                    // ### STEP A ###
-                    console.log('### app.get(filter - STEP B : get size-item');
-                    console.log('================================= Result =======================================');
-                    console.log('### app.get(filter) - response : ', response_sizeItm.data);
-                    console.log('### app.get(filter) - result data : ', response_sizeItm.data.data);
-                    //console.log('### app.get(filter) - result page id : ', response_sizeItm.data.data.query.pages[splt]);
-                    const _responseSizeItmPageIdNode = Object.keys(response_sizeItm.data.data.query.pages)[0];
-                    const _responseSizeItmPageId = _responseSizeItmPageIdNode != -1 ? response_sizeItm.data.data.query.pages[_responseSizeItmPageIdNode].pageid : null;
-                    const responseSizeItmREvisionsSize = _responseSizeItmPageId ? response_sizeItm.data.data.query.pages[_responseSizeItmPageId].revisions[0].size : 0;
-                    console.log('### app.get(filter) - result page id  : ', _responseSizeItmPageId);
-                    console.log('### app.get(filter) - result size : ', _responseSizeItmPageIdNode != -1 ?  responseSizeItmREvisionsSize : 0);
-                    
-                    // ### STEP C ###
-                    console.log('### app.get(filter) - STEP C : get nbr-internal-links');
-                    console.log('================================= Result =======================================');
-                    console.log('### app.get(filter) - response : ', response_nbrInterLink);
-                    console.log('### app.get(filter) - response data  : ', response_nbrInterLink.data);
-                    console.log('### app.get(filter) - response data sum: ', response_nbrInterLink.data.sum);
-                    console.log('### app.get(filter) - response data size: ', response_nbrInterLink.data.size);
-                    console.table(response_nbrInterLink.data.data.query.backlinks);
-                    console.log(response_nbrInterLink.status);
-                                        
-                    // ### STEP D ###
-                    console.log('### app.get(filter) - STEP D : get nbr-external-links');
-                    console.log('================================= Result =======================================');
-                    console.log('### app.get(filter) - response : ', response_nbrExtrLink);
-                    console.log('### app.get(filter) - response data : ', response_nbrExtrLink.data);
-                    console.table(response_nbrExtrLink.data);
-                    console.log('### app.get(filter) - response data size : ', response_nbrExtrLink.data.size);
-                    console.log('### app.get(filter) - response status : ', response_nbrExtrLink.status);
-                
-                    // ### STEP E ###
-                    // console.log('qrt five');
-                    console.log('### app.get(filter) - STEP E : get crt-five');
-                    console.log('================================= Result =======================================');
-                    console.log('### app.get(filter) -  crt five : ', response_crtFive);
-                    console.log('### app.get(filter) -  crt five data : ', response_crtFive.data.datasiz);
-                    console.table(response_crtFive.data.datasiz);
-                    // console.table(response_crtFive.data);
-                    console.log('### app.get(filter) - crt five sumTotale: ', response_crtFive.data.sumTotale);
-                    console.log('### app.get(filter) - crt five size: ', response_crtFive.data.size);
-                    console.log('### app.get(filter) - crt five rowHist: ', response_crtFive.data.rowofhits);
-                    console.log('### app.get(filter) - crt five : histVal', response_crtFive.data.hitsValue);
-                    console.log('### app.get(filter) - crt five moyenneViews', response_crtFive.data.moyenneViews);
-                    console.log('### app.get(filter) - crt five status', response_crtFive.status);
-                    
-                    const casl = await axios.post(`http://localhost:5000/api/additive_wighting`, {
-                        normTable: response_crtFive.data.rowofhits,
-                        wight: response_crtFive.data.sumTotale
-                    });
-                    
-                    // console.log('cal : ', cal);
-                    console.log('### app.get(filter) - notority : ', responseCal.data.data);
-
-                    console.log('### newProduct : start insert');
-            
-                    const addProduct = new histo({
-                        labelprolexme: labelprolexme,
-                        [fieldForLanguage]: {
-                            numpivot: '',
-                            nbrauthores: `${response_nbrContri.data.sumD}`,
-                            extlink: `${response_nbrExtrLink.data.size}`,
-                            hists: `${response_crtFive.data.hitsValue}`,
-                            sizedata: `${responseSizeItmREvisionsSize}`,
-                            pagerankwiki: `${response_crtFive.data.sumTotale}`,
-                            frenq: `${responseCal.data.data}`,
-                            wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
-                            date: currentTime,
-                            lng: lng,
-                            type: 'from web',
-                            year_views: [
-                                {
-                                    year: `${year}`,
-                                    views_average: `${response_crtFive.data.moyenneViews}`,
-                                    notoriety: responseCal.data.data === 1 || responseCal.data.data === 2 ? `${responseCal.data.data}` : '2'
-                                }
-                            ],
-                        } 
-                    });
-            
-                    const newProducts = await addProduct.save();
-                    console.log('### newProducts : end insert');
-                    
-                    return res.status(200).json({
-                        data: query,
-                        messA: 'test',
-                        newD: query_size.length,
-                        // oldD: result_size.length
-                    })
-                } else {
-                    console.log(results);
-
-                    const addProduct = new histo({
-                        labelprolexme: labelprolexme,
-                        [fieldForLanguage]: {
-                            numpivot: results[0].NUM_PIVOT ??= '',
-                            nbrauthores: '',
-                            extlink: results[0].WIKIPEDIA_LINK ??= '',
-                            hists: results[0].SORT ??= '',
-                            sizedata: '',
-                            pagerankwiki: '',
-                            frenq: results[0].NUM_FREQUENCY ??= '',
-                            wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
-                            date: currentTime,
-                            lng: lng,
-                            type: 'mysql',
-                            year_views: [
-                                {
-                                    year: `${year}`,
-                                    views_average: '',
-                                    notoriety: results[0].NUM_FREQUENCY ??='2'
-                                }
-                            ],
-                        }
-                    });
-    
-                    const newProducts = await addProduct.save();
+                    ].every(res => res.status === 200) 
+                ){
+                    return res.status(500).json({error: 'Error fetching data - Server Error 500'});
                 }
 
+                // ### STEP A ###
+                console.log('### app.get(filter) - STEP A : get nbr-Contributors');                    
+                console.log('================================= Result =======================================');
+                console.log('### app.get(filter) - result  : ', response_nbrContri.data);
+                console.log('### app.get(filter) - result splt  : ', response_nbrContri.data.splt);
+                console.log('### app.get(filter) - result sumD  : ', response_nbrContri.data.sumD);
+                console.log('### app.get(filter) - result size : ', response_nbrContri.data.size);
+                console.log('### app.get(filter) - result data : ', response_nbrContri.data.data);
+                console.table(response_nbrContri.data.data);
+                //var splt = response_nbrContri.data.splt;
+                var splt = Object.keys(response_nbrContri.data.data.query.pages)[0];
+                
+                // ### STEP A ###
+                console.log('### app.get(filter - STEP B : get size-item');
+                console.log('================================= Result =======================================');
+                console.log('### app.get(filter) - response : ', response_sizeItm.data);
+                console.log('### app.get(filter) - result data : ', response_sizeItm.data.data);
+                //console.log('### app.get(filter) - result page id : ', response_sizeItm.data.data.query.pages[splt]);
+                const _responseSizeItmPageIdNode = Object.keys(response_sizeItm.data.data.query.pages)[0];
+                const _responseSizeItmPageId = _responseSizeItmPageIdNode != -1 ? response_sizeItm.data.data.query.pages[_responseSizeItmPageIdNode].pageid : null;
+                const responseSizeItmREvisionsSize = _responseSizeItmPageId ? response_sizeItm.data.data.query.pages[_responseSizeItmPageId].revisions[0].size : 0;
+                console.log('### app.get(filter) - result page id  : ', _responseSizeItmPageId);
+                console.log('### app.get(filter) - result size : ', _responseSizeItmPageIdNode != -1 ?  responseSizeItmREvisionsSize : 0);
+                
+                // ### STEP C ###
+                console.log('### app.get(filter) - STEP C : get nbr-internal-links');
+                console.log('================================= Result =======================================');
+                console.log('### app.get(filter) - response : ', response_nbrInterLink);
+                console.log('### app.get(filter) - response data  : ', response_nbrInterLink.data);
+                console.log('### app.get(filter) - response data sum: ', response_nbrInterLink.data.sum);
+                console.log('### app.get(filter) - response data size: ', response_nbrInterLink.data.size);
+                console.table(response_nbrInterLink.data.data.query.backlinks);
+                console.log(response_nbrInterLink.status);
+                                    
+                // ### STEP D ###
+                console.log('### app.get(filter) - STEP D : get nbr-external-links');
+                console.log('================================= Result =======================================');
+                console.log('### app.get(filter) - response : ', response_nbrExtrLink);
+                console.log('### app.get(filter) - response data : ', response_nbrExtrLink.data);
+                console.table(response_nbrExtrLink.data);
+                console.log('### app.get(filter) - response data size : ', response_nbrExtrLink.data.size);
+                console.log('### app.get(filter) - response status : ', response_nbrExtrLink.status);
+            
+                // ### STEP E ###
+                // console.log('qrt five');
+                console.log('### app.get(filter) - STEP E : get crt-five');
+                console.log('================================= Result =======================================');
+                console.log('### app.get(filter) -  crt five : ', response_crtFive);
+                console.log('### app.get(filter) -  crt five data : ', response_crtFive.data.datasiz);
+                console.table(response_crtFive.data.datasiz);
+                // console.table(response_crtFive.data);
+                console.log('### app.get(filter) - crt five sumTotale: ', response_crtFive.data.sumTotale);
+                console.log('### app.get(filter) - crt five size: ', response_crtFive.data.size);
+                console.log('### app.get(filter) - crt five rowHist: ', response_crtFive.data.rowofhits);
+                console.log('### app.get(filter) - crt five : histVal', response_crtFive.data.hitsValue);
+                console.log('### app.get(filter) - crt five moyenneViews', response_crtFive.data.moyenneViews);
+                console.log('### app.get(filter) - crt five status', response_crtFive.status);
+                
+                const casl = await axios.post(`http://localhost:5000/api/additive_wighting`, {
+                    normTable: response_crtFive.data.rowofhits,
+                    wight: response_crtFive.data.sumTotale
+                });
+                
+                // console.log('cal : ', cal);
+                console.log('### app.get(filter) - notority : ', responseCal.data.data);
+
+                console.log('### newProduct : start insert');
+        
+                const addProduct = new histo({
+                    labelprolexme: labelprolexme,
+                    [fieldForLanguage]: {
+                        numpivot: '',
+                        nbrauthores: `${response_nbrContri.data.sumD}`,
+                        extlink: `${response_nbrExtrLink.data.size}`,
+                        hists: `${response_crtFive.data.hitsValue}`,
+                        sizedata: `${responseSizeItmREvisionsSize}`,
+                        pagerankwiki: `${response_crtFive.data.sumTotale}`,
+                        frenq: `${responseCal.data.data}`,
+                        wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
+                        date: currentTime,
+                        lng: lng,
+                        type: 'from web',
+                        year_views: [
+                            {
+                                year: `${year}`,
+                                views_average: `${response_crtFive.data.moyenneViews}`,
+                                notoriety: responseCal.data.data === 1 || responseCal.data.data === 2 ? `${responseCal.data.data}` : '2'
+                            }
+                        ],
+                    } 
+                });
+        
+                const newProducts = await addProduct.save();
+                console.log('### newProducts : end insert');
+                
                 return res.status(200).json({
                     data: query,
-                    messB: 'test',
+                    messA: 'test',
+                    newD: query_size.length,
+                    // oldD: result_size.length
                 })
-            });
+            } else {
+                console.log(results);
+
+                const addProduct = new histo({
+                    labelprolexme: labelprolexme,
+                    [fieldForLanguage]: {
+                        numpivot: results[0].NUM_PIVOT ??= '',
+                        nbrauthores: '',
+                        extlink: results[0].WIKIPEDIA_LINK ??= '',
+                        hists: results[0].SORT ??= '',
+                        sizedata: '',
+                        pagerankwiki: '',
+                        frenq: results[0].NUM_FREQUENCY ??= '',
+                        wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
+                        date: currentTime,
+                        lng: lng,
+                        type: 'mysql',
+                        year_views: [
+                            {
+                                year: `${year}`,
+                                views_average: '',
+                                notoriety: results[0].NUM_FREQUENCY ??='2'
+                            }
+                        ],
+                    }
+                });
+
+                const newProducts = await addProduct.save();
+            }
+
+            return res.status(200).json({
+                data: query,
+                messB: 'test',
+            })
         } else if (!query[0][fieldForLanguage]){
                 // Le produit existe dans mongodb
     
@@ -521,6 +518,7 @@ app.get('/filter', async (req, res) => {
             
         }
     } catch (err) {
+        console.error(err);
         return res.status(500).json({message: err});
     }
 });
@@ -573,8 +571,6 @@ app.get("/api/scrap", async (req, res) => {
 
     const { name, lng } = req.query;
 
-    console.log('### app.get(/api/scrap) - req.query', req.query);
-
     try {
         url = `https://${lng}.wikipedia.org/wiki/${name}`;
         const encodedURL = encodeURI(url);
@@ -589,7 +585,7 @@ app.get("/api/scrap", async (req, res) => {
             }
         });
     } catch (err) {
-        console.log('### app.get(/api/scrap) - error : ', err);
+        console.error('### app.get(/api/scrap) - error : ', err);
     }
 });
 
@@ -980,6 +976,59 @@ app.get('/api/getrecordbyid', async (req, res) => {
         });
     }
 
+});
+
+/**
+ * @param {import('next').NextApiRequest} req
+ * @param {import('next').NextApiResponset} res
+ */
+app.get('/api/getrandomlabelname', async (req, res) => {
+    const lng = req.query['lng'];
+    const db = req.db
+
+    const dbTable = getDatabaseTableName(lng);
+    const dbTableColunm = lng==='fr' ? 'LABEL_ALIAS' : 'WIKIPEDIA_LINK'
+
+    const getRandomRow = async (column, table, count) => {
+        const random = Math.floor(Math.random()*count) + 1;
+        const result = await db.query(`SELECT ${column} FROM ${table} LIMIT 1 OFFSET ?`, [random-1]);
+        return result[0][0][`${column}`];
+    }
+    const getCount = async (table) => {
+        const results = await db.query(`SELECT COUNT(*) as count FROM ${table}`);
+        return results[0][0].count;
+    }
+
+    try {
+        const count = await getCount(dbTable);
+        let labelname = '';
+        if (lng==='fr'){
+            let randomLabelname = await getRandomRow(dbTableColunm, dbTable, count);
+            let randomLabelnameArray = randomLabelname.split(' ');
+            while (randomLabelname === null || randomLabelnameArray.length > 1) {
+                randomLabelname = await getRandomRow(dbTableColunm, dbTable, count);
+                randomLabelnameArray = randomLabelname.split(' ');
+                console.log(randomLabelname);
+            }
+            labelname = randomLabelname;
+        } else {
+            let randomLabelname = await getRandomRow(dbTableColunm, dbTable, count);
+            while (randomLabelname === null){
+                randomLabelname = await getRandomRow(dbTableColunm, dbTable, count);
+                console.log('WIKIPEDIA_LINK NULL');
+            }
+            labelname = randomLabelname;
+        }
+      
+        res.status(200).json({data: labelname });
+        
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({
+            error: '@11 - Server Error 500',
+            message: err
+        })
+    }
 });
 
 app.use('/api/cls', require('./routes/cls'));
