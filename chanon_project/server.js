@@ -268,7 +268,7 @@ app.get('/filter', async (req, res) => {
                     // oldD: result_size.length
                 })
             } else {
-                console.log(results);
+                console.log('@ results : ', results);
 
                 const addProduct = new histo({
                     labelprolexme: labelprolexme,
@@ -279,7 +279,7 @@ app.get('/filter', async (req, res) => {
                         hists: results[0].SORT ??= '',
                         sizedata: '',
                         pagerankwiki: '',
-                        frenq: results[0].NUM_FREQUENCY ??= '',
+                        frenq: results[0].NUM_FREQUENCY !=null ? results[0].NUM_FREQUENCY : '2',
                         wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
                         date: currentTime,
                         lng: lng,
@@ -288,13 +288,14 @@ app.get('/filter', async (req, res) => {
                             {
                                 year: `${year}`,
                                 views_average: '',
-                                notoriety: results[0].NUM_FREQUENCY ??='2'
+                                notoriety: results[0].NUM_FREQUENCY != null ? results[0].NUM_FREQUENCY : '2'
                             }
                         ],
                     }
                 });
 
-                const newProducts = await addProduct.save();
+                //const newProducts = await addProduct.save();
+                await addProduct.save();
             }
 
             return res.status(200).json({
