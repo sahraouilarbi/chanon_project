@@ -252,7 +252,7 @@ app.get('/filter', async (req, res) => {
                             {
                                 year: `${year}`,
                                 views_average: `${response_crtFive.data.moyenneViews}`,
-                                notoriety: responseCal.data.data === 1 || responseCal.data.data === 2 ? `${responseCal.data.data}` : '2'
+                                notoriety: responseCal.data.data != 0 ? `${responseCal.data.data}` : '3'
                             }
                         ],
                     } 
@@ -279,7 +279,7 @@ app.get('/filter', async (req, res) => {
                         hists: results[0].SORT ??= '',
                         sizedata: '',
                         pagerankwiki: '',
-                        frenq: results[0].NUM_FREQUENCY !=null ? results[0].NUM_FREQUENCY : '2',
+                        frenq: results[0].NUM_FREQUENCY !=null ? results[0].NUM_FREQUENCY : '3',
                         wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
                         date: currentTime,
                         lng: lng,
@@ -288,7 +288,7 @@ app.get('/filter', async (req, res) => {
                             {
                                 year: `${year}`,
                                 views_average: '',
-                                notoriety: results[0].NUM_FREQUENCY != null ? results[0].NUM_FREQUENCY : '2'
+                                notoriety: results[0].NUM_FREQUENCY != null ? results[0].NUM_FREQUENCY : '3'
                             }
                         ],
                     }
@@ -383,7 +383,7 @@ app.get('/filter', async (req, res) => {
                             hists: crtFiveHitsValue,
                             sizedata: sizeItm,
                             pagerankwiki: crtFiveSumTotale,
-                            frenq: '2',
+                            frenq: cal != 0 ? `${cal}` : '3',
                             wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
                             date: currentTime,
                             lng: lng,
@@ -392,7 +392,7 @@ app.get('/filter', async (req, res) => {
                                 {
                                     year: `${year}`,
                                     views_average: crtFiveMoyenneViews,
-                                    notoriety: cal === 1 || cal === 2 ? `${cal}` : '2'
+                                    notoriety: cal != 0 ? `${cal}` : '3'
                                 }
                             ], 
                     }
@@ -479,7 +479,7 @@ app.get('/filter', async (req, res) => {
                     const newEntry = {
                         year: `${year}`,
                         views_average: `${response_crtFive.data.moyenneViews}`,
-                        notoriety: cal.data.data === 1 || cal.data.data === 2 ? `${cal.data.data}` : '2'
+                        notoriety: cal.data.data != 0 ? `${cal.data.data}` : '3'
                     };
                     const yearViewsPath = `${fieldForLanguage}.year_views`;
                     const addNewEntry = await histo.findByIdAndUpdate(
@@ -891,7 +891,7 @@ app.get('/api/fetch', async (req, res) => {
  */
 app.get('/api/classification', async (req, res)=>{
 
-    const { language, year } = req.query; // Extract the language and year query parameters
+    const { language, type, year } = req.query; // Extract the language and year query parameters
 
     const query = {};
 
@@ -906,6 +906,11 @@ app.get('/api/classification', async (req, res)=>{
         const lngPath = `${fieldForLanguage}.lng`;
         query[lngPath] = language;
         
+        if (type) {
+            const typePath = `${fieldForLanguage}.type`;
+            query[typePath] = type;
+        }
+        
         if (year) {
             const yearPath = `${fieldForLanguage}.year_views.year`;
             query[yearPath] = year;
@@ -917,11 +922,13 @@ app.get('/api/classification', async (req, res)=>{
         // Construct the query object based on provided parameters
         
         const data = await histo.find(query)
-                                .sort({ frenq: -1})
-                                .limit(100)
-                                .lean()
-                                .exec();
-
+        .sort({notoriety: -1})
+        .limit(100)
+        .lean()
+        .exec();
+        
+        //const notoriety = data[0][fieldForLanguage].year_views.find(obj => obj.year === year).notoriety;
+        
         return res.status(200).json({ data: data });
 
     } catch(err){

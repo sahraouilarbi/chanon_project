@@ -4,8 +4,6 @@ const router = express.Router();
 // Define a GET route for the root path ('/')
 router.get('/', async (req, res) => {
     try {
-        console.log('data'); // Log 'data' to the console
-
         // Generate a random number between 0 and 3 (inclusive)
         const randomNumber = Math.floor(Math.random() * 4);
 
