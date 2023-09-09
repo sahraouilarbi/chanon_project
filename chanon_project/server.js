@@ -268,18 +268,24 @@ app.get('/filter', async (req, res) => {
                     // oldD: result_size.length
                 })
             } else {
-                console.log('@ results : ', results);
+
+                // Choose the correct table
+                const dbTableColunm = lng === 'fr' ? 'LABEL_ALIAS' : 'WIKIPEDIA_LINK';
+
+                // Get the result from db
+                const resultat = await db.query(`SELECT * FROM ${dbTableName} WHERE ${dbTableColunm} = '${labelprolexme}'`);
+                const obgResult = resultat[0][0];
 
                 const addProduct = new histo({
-                    labelprolexme: labelprolexme,
+                    labelprolexme: obgResult.LABEL_PROLEXEME != null ? obgResult.LABEL_PROLEXEME : '',
                     [fieldForLanguage]: {
-                        numpivot: results[0].NUM_PIVOT ??= '',
+                        numpivot: obgResult.NUM_PIVOT != null ? obgResult.NUM_PIVOT : '',
                         nbrauthores: '',
-                        extlink: results[0].WIKIPEDIA_LINK ??= '',
-                        hists: results[0].SORT ??= '',
+                        extlink: obgResult.WIKIPEDIA_LINK != null ? obgResult.WIKIPEDIA_LINK : '',
+                        hists: obgResult.SORT != null ? obgResult.SORT : '',
                         sizedata: '',
                         pagerankwiki: '',
-                        frenq: results[0].NUM_FREQUENCY !=null ? results[0].NUM_FREQUENCY : '3',
+                        frenq: obgResult.NUM_FREQUENCY != null ? obgResult.NUM_FREQUENCY : '3',
                         wikilink: `https://${lng}.wikipedia.org/wiki/${labelprolexme}`,
                         date: currentTime,
                         lng: lng,
@@ -288,7 +294,7 @@ app.get('/filter', async (req, res) => {
                             {
                                 year: `${year}`,
                                 views_average: '',
-                                notoriety: results[0].NUM_FREQUENCY != null ? results[0].NUM_FREQUENCY : '3'
+                                notoriety: obgResult.NUM_FREQUENCY != null ? obgResult.NUM_FREQUENCY : '3'
                             }
                         ],
                     }
@@ -580,7 +586,7 @@ app.get("/api/scrap", async (req, res) => {
                 const $ = cheerio.load(html);
                 // For example:
                 const title = $('table>tbody>tr').text();
-                console.log('### app.get(/api/scrap) - title : ', title);
+                //console.log('### app.get(/api/scrap) - title : ', title);
                 // logStream.write(title);
                 res.send(title);
             }
@@ -923,7 +929,6 @@ app.get('/api/classification', async (req, res)=>{
         
         const data = await histo.find(query)
         .sort({notoriety: -1})
-        .limit(100)
         .lean()
         .exec();
         

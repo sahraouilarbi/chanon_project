@@ -8,6 +8,7 @@ router.get('/', async (req, res) => {
         const randomNumber = Math.floor(Math.random() * 4);
 
         // Send a JSON response with a status code of 200 and the random number in the 'data' property
+        console.log(randomNumber);
         return res.status(200).json({
             data: randomNumber
         });
